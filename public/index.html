@@ -39,6 +39,12 @@
       <div class="tool-group">
         <label class="tool-label">Color</label>
         <input type="color" id="color-picker" value="#ffffff" title="Pen color" />
+        <div id="color-presets" class="color-presets">
+          <button class="color-preset" data-color="#e74c3c" style="background:#e74c3c" title="Red"></button>
+          <button class="color-preset" data-color="#3498db" style="background:#3498db" title="Blue"></button>
+          <button class="color-preset" data-color="#f39c12" style="background:#f39c12" title="Yellow"></button>
+        </div>
+        <div id="recent-colors" class="color-presets"></div>
       </div>
 
       <div class="tool-group">
@@ -72,6 +78,17 @@
         <label class="tool-label">Recordings</label>
         <ul id="recordings-list" class="recordings-list">
           <li class="no-recordings">No recordings yet</li>
+        </ul>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <!-- Board Presets -->
+      <div class="tool-group">
+        <label class="tool-label">Board Presets</label>
+        <button id="save-preset-btn" class="action-btn" title="Save current board state">💾 Save</button>
+        <ul id="presets-list" class="presets-list">
+          <li class="no-presets">No presets saved</li>
         </ul>
       </div>
 

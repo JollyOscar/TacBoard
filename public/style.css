@@ -68,7 +68,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 /* ── Toolbar (left sidebar) ──────────────────────────────────── */
 #toolbar {
-  width: 80px; flex-shrink: 0;
+  width: 110px; flex-shrink: 0;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
@@ -110,6 +110,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   border: 1px solid var(--border); border-radius: 6px;
   cursor: pointer; background: none; padding: 2px;
 }
+
+.color-presets {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  width: 100%; justify-content: center;
+  margin-top: 4px;
+}
+.color-preset {
+  width: 26px; height: 26px; border-radius: 4px;
+  border: 2px solid rgba(255,255,255,0.3);
+  cursor: pointer; transition: transform .1s, border-color .1s;
+  padding: 0;
+}
+.color-preset:hover { transform: scale(1.1); border-color: #fff; }
 
 #size-picker { width: 62px; accent-color: var(--accent2); }
 #size-val { font-size: .75rem; color: var(--text-muted); }
@@ -172,6 +185,45 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .rec-delete:hover { opacity: 1; }
 
 .no-recordings {
+  padding: 8px; text-align: center; font-size: .68rem;
+  color: var(--text-muted); font-style: italic;
+}
+
+/* Board Presets list */
+.presets-list {
+  list-style: none; width: 100%; max-height: 140px; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px; margin-top: 4px;
+}
+.presets-list::-webkit-scrollbar { width: 4px; }
+.presets-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.preset-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 6px; border-radius: 4px; margin: 2px 0;
+  cursor: pointer; transition: background .1s;
+  border: 1px solid transparent;
+}
+.preset-item:hover { background: var(--card-bg); }
+
+.preset-info { flex: 1; pointer-events: all; }
+.preset-name { font-size: .68rem; font-weight: 600; color: var(--text); }
+.preset-time { font-size: .58rem; color: var(--text-muted); margin-top: 1px; }
+
+.preset-actions {
+  display: flex; gap: 2px;
+}
+.preset-edit, .preset-delete {
+  width: 16px; height: 16px; border-radius: 3px;
+  border: none; color: #fff; font-size: .7rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  opacity: 0.7; transition: opacity .1s;
+}
+.preset-edit { background: var(--accent2); }
+.preset-delete { background: var(--danger); }
+.preset-edit:hover, .preset-delete:hover { opacity: 1; }
+
+.no-presets {
   padding: 8px; text-align: center; font-size: .68rem;
   color: var(--text-muted); font-style: italic;
 }

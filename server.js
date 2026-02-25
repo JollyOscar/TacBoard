@@ -28,6 +28,18 @@ let rep = { active: false, timers: [], preSnap: null, currentRecId: null };
 const recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
 let nextRecId = 1;
 
+// ── Board Presets ─────────────────────────────────────────────
+const boardPresets = [];  // Array of saved board states: { id, name, timestamp, strokes, arrows, tokens }
+let nextPresetId = 1;
+
+function getBoardPresetsList() {
+  return boardPresets.map(p => ({
+    id: p.id,
+    name: p.name,
+    timestamp: p.timestamp
+  }));
+}
+
 function recordEvent(event, data) {
   if (!rec.active) return;
   rec.timeline.push({ t: Date.now() - rec.start, event, data });
@@ -299,6 +311,56 @@ io.on('connection', (socket) => {
       recordings.splice(idx, 1);
       io.emit('recordings-list', getRecordingsList());
     }
+  });
+
+  // 10d. Board presets
+  socket.on('save-preset', ({ name }) => {
+    const preset = {
+      id: nextPresetId++,
+      name: name || `Preset ${new Date().toLocaleString()}`,
+      timestamp: Date.now(),
+      strokes: JSON.parse(JSON.stringify(state.strokes)),
+      arrows: JSON.parse(JSON.stringify(state.arrows)),
+      tokens: JSON.parse(JSON.stringify(state.tokens))
+    };
+    boardPresets.push(preset);
+    io.emit('presets-list', getBoardPresetsList());
+    socket.emit('preset-saved', { id: preset.id, name: preset.name });
+  });
+
+  socket.on('load-preset', ({ presetId }) => {
+    const preset = boardPresets.find(p => p.id === presetId);
+    if (!preset) return;
+    state.strokes = JSON.parse(JSON.stringify(preset.strokes));
+    state.arrows = JSON.parse(JSON.stringify(preset.arrows));
+    state.tokens = JSON.parse(JSON.stringify(preset.tokens));
+    io.emit('clear-board');
+    io.emit('tokens-cleared');
+    io.emit('preset-loaded', {
+      strokes: preset.strokes,
+      arrows: preset.arrows,
+      tokens: Object.values(preset.tokens)
+    });
+  });
+
+  socket.on('rename-preset', ({ presetId, newName }) => {
+    const preset = boardPresets.find(p => p.id === presetId);
+    if (preset) {
+      preset.name = newName;
+      io.emit('presets-list', getBoardPresetsList());
+    }
+  });
+
+  socket.on('delete-preset', ({ presetId }) => {
+    const idx = boardPresets.findIndex(p => p.id === presetId);
+    if (idx !== -1) {
+      boardPresets.splice(idx, 1);
+      io.emit('presets-list', getBoardPresetsList());
+    }
+  });
+
+  socket.on('get-presets', () => {
+    socket.emit('presets-list', getBoardPresetsList());
   });
 
   // 11. Disconnect

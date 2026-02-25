@@ -679,8 +679,9 @@ function connectSocket(username) {
 
     updateUserList(users);
     toast(`Welcome, ${you.username}! Color: <span style="color:${you.color}">■</span>`);
-    // Request recordings list when joining
+    // Request recordings list and presets when joining
     socket.emit('get-recordings');
+    socket.emit('get-presets');
   });
 
   socket.on('user-joined', (user) => {
@@ -848,6 +849,18 @@ function connectSocket(username) {
 
   socket.on('replay-done',    endReplay);
   socket.on('replay-stopped', endReplay);
+
+  // ── Board Presets socket events ───────────────────────────────────────
+  socket.on('presets-list', (presets) => {
+    _boardPresets = presets;
+    renderPresetsList();
+  });
+
+  socket.on('preset-saved', ({ id, name }) => {
+    toast(`💾 Preset saved: ${name}`);
+  });
+
+  socket.on('preset-loaded', applyBoardSnapshot);
 }
 
 // ── User list ─────────────────────────────────────────────────
@@ -879,6 +892,124 @@ document.getElementById('tool-undo').addEventListener('click',   () => undoLast(
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
 ownEraseCheck?.addEventListener('change',      () => { ownEraseOnly = ownEraseCheck.checked; updateClearBtnLabels(); });
 arrowDashedCheck?.addEventListener('change',   () => { arrowDashed  = arrowDashedCheck.checked; });
+
+// ── Color Presets ─────────────────────────────────────────────
+const recentColors = new Set();
+const MAX_RECENT_COLORS = 6;
+
+function addRecentColor(color) {
+  if (color === '#ffffff' || color === '#fff') return; // skip white
+  const normalized = color.toLowerCase();
+  // Skip if it's already in default presets
+  if (['#e74c3c', '#3498db', '#f39c12'].includes(normalized)) return;
+  
+  recentColors.delete(normalized);
+  recentColors.add(normalized);
+  
+  // Keep only last N colors
+  const arr = Array.from(recentColors);
+  if (arr.length > MAX_RECENT_COLORS) {
+    recentColors.delete(arr[0]);
+  }
+  
+  renderRecentColors();
+}
+
+function renderRecentColors() {
+  const container = document.getElementById('recent-colors');
+  container.innerHTML = '';
+  Array.from(recentColors).forEach(color => {
+    const btn = document.createElement('button');
+    btn.className = 'color-preset';
+    btn.style.background = color;
+    btn.dataset.color = color;
+    btn.title = color;
+    container.appendChild(btn);
+  });
+  // Re-attach event listeners
+  container.querySelectorAll('.color-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      colorPicker.value = btn.dataset.color;
+    });
+  });
+}
+
+// Color preset click handlers
+document.querySelectorAll('#color-presets .color-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    colorPicker.value = btn.dataset.color;
+  });
+});
+
+// Track color changes to add to recent
+colorPicker.addEventListener('change', () => {
+  addRecentColor(colorPicker.value);
+});
+
+// ── Board Presets ─────────────────────────────────────────────────
+function renderPresetsList() {
+  const list = document.getElementById('presets-list');
+  if (!_boardPresets.length) {
+    list.innerHTML = '<li class="no-presets">No presets saved</li>';
+    return;
+  }
+  list.innerHTML = '';
+  _boardPresets.forEach(preset => {
+    const li = document.createElement('li');
+    li.className = 'preset-item';
+    const time = new Date(preset.timestamp).toLocaleString();
+    li.innerHTML = `
+      <div class="preset-info" data-id="${preset.id}">
+        <div class="preset-name">${escHtml(preset.name)}</div>
+        <div class="preset-time">${time}</div>
+      </div>
+      <div class="preset-actions">
+        <button class="preset-edit" data-id="${preset.id}" title="Rename">✏️</button>
+        <button class="preset-delete" data-id="${preset.id}" title="Delete">×</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+
+  // Load handlers
+  list.querySelectorAll('.preset-info').forEach(el => {
+    el.addEventListener('click', () => {
+      if (confirm('Load this preset? This will replace the current board.')) {
+        socket?.emit('load-preset', { presetId: +el.dataset.id });
+      }
+    });
+  });
+
+  // Edit handlers
+  list.querySelectorAll('.preset-edit').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const preset = _boardPresets.find(p => p.id === +btn.dataset.id);
+      if (!preset) return;
+      const newName = prompt('Rename preset:', preset.name);
+      if (newName && newName.trim() && newName !== preset.name) {
+        socket?.emit('rename-preset', { presetId: preset.id, newName: newName.trim() });
+      }
+    });
+  });
+
+  // Delete handlers
+  list.querySelectorAll('.preset-delete').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (confirm('Delete this preset?')) {
+        socket?.emit('delete-preset', { presetId: +btn.dataset.id });
+      }
+    });
+  });
+}
+
+document.getElementById('save-preset-btn').addEventListener('click', () => {
+  const name = prompt('Name this preset:', `Board ${new Date().toLocaleTimeString()}`);
+  if (name && name.trim()) {
+    socket?.emit('save-preset', { name: name.trim() });
+  }
+});
 
 function updateClearBtnLabels() {
   const linesBtn = document.getElementById('clear-drawings-btn');
