@@ -57,17 +57,22 @@
 
       <!-- Token palette -->
       <div class="tool-group">
-        <label class="tool-label">Add Token</label>
-        <div id="token-palette">
-          <button class="token-swatch token-ball-btn" data-color="#fff" data-shape="ball" title="Place soccer ball" style="background:#3a7d2c;font-size:1.1rem;">⚽</button>
-          <button class="token-swatch" data-color="#e74c3c" data-label="1"  style="background:#e74c3c">1</button>
-          <button class="token-swatch" data-color="#3498db" data-label="1"  style="background:#3498db">1</button>
-          <button class="token-swatch" data-color="#2ecc71" data-label="1"  style="background:#2ecc71">1</button>
-          <button class="token-swatch" data-color="#f39c12" data-label="1"  style="background:#f39c12">1</button>
-          <button class="token-swatch" data-color="#9b59b6" data-label="1"  style="background:#9b59b6">1</button>
-          <button class="token-swatch" data-color="#1abc9c" data-label="1"  style="background:#1abc9c">1</button>
-          <button class="token-swatch" data-color="#ffffff" data-label="1"  style="background:#fff;color:#333;">1</button>
-          <button class="token-swatch" data-color="#222222" data-label="1"  style="background:#222;color:#fff;">1</button>
+        <div class="collapsible-header" data-section="tokens">
+          <span class="arrow">▼</span>
+          <label class="tool-label">Add Token</label>
+        </div>
+        <div id="tokens-content" class="collapsible-content">
+          <div id="token-palette">
+            <button class="token-swatch token-ball-btn" data-color="#fff" data-shape="ball" title="Place soccer ball" style="background:#3a7d2c;font-size:1.1rem;">⚽</button>
+            <button class="token-swatch" data-color="#e74c3c" data-label="1"  style="background:#e74c3c">1</button>
+            <button class="token-swatch" data-color="#3498db" data-label="1"  style="background:#3498db">1</button>
+            <button class="token-swatch" data-color="#2ecc71" data-label="1"  style="background:#2ecc71">1</button>
+            <button class="token-swatch" data-color="#f39c12" data-label="1"  style="background:#f39c12">1</button>
+            <button class="token-swatch" data-color="#9b59b6" data-label="1"  style="background:#9b59b6">1</button>
+            <button class="token-swatch" data-color="#1abc9c" data-label="1"  style="background:#1abc9c">1</button>
+            <button class="token-swatch" data-color="#ffffff" data-label="1"  style="background:#fff;color:#333;">1</button>
+            <button class="token-swatch" data-color="#222222" data-label="1"  style="background:#222;color:#fff;">1</button>
+          </div>
         </div>
       </div>
 
@@ -75,21 +80,31 @@
 
       <!-- Recordings list -->
       <div class="tool-group">
-        <label class="tool-label">Recordings</label>
-        <ul id="recordings-list" class="recordings-list">
-          <li class="no-recordings">No recordings yet</li>
-        </ul>
+        <div class="collapsible-header" data-section="recordings">
+          <span class="arrow">▼</span>
+          <label class="tool-label">Recordings</label>
+        </div>
+        <div id="recordings-content" class="collapsible-content">
+          <ul id="recordings-list" class="recordings-list">
+            <li class="no-recordings">No recordings yet</li>
+          </ul>
+        </div>
       </div>
 
       <div class="tool-divider"></div>
 
       <!-- Board Presets -->
       <div class="tool-group">
-        <label class="tool-label">Board Presets</label>
-        <button id="save-preset-btn" class="action-btn" title="Save current board state">💾 Save</button>
-        <ul id="presets-list" class="presets-list">
-          <li class="no-presets">No presets saved</li>
-        </ul>
+        <div class="collapsible-header" data-section="presets">
+          <span class="arrow">▼</span>
+          <label class="tool-label">Board Presets</label>
+        </div>
+        <div id="presets-content" class="collapsible-content">
+          <button id="save-preset-btn" class="action-btn" title="Save current board state">💾 Save</button>
+          <ul id="presets-list" class="presets-list">
+            <li class="no-presets">No presets saved</li>
+          </ul>
+        </div>
       </div>
 
       <div class="tool-divider"></div>

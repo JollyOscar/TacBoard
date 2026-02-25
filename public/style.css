@@ -68,35 +68,59 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 /* ── Toolbar (left sidebar) ──────────────────────────────────── */
 #toolbar {
-  width: 110px; flex-shrink: 0;
+  width: 120px; flex-shrink: 0;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
-  align-items: center; gap: 4px;
-  padding: 12px 6px;
+  align-items: center; gap: 6px;
+  padding: 14px 8px;
   overflow-y: auto;
 }
 
 .tool-group {
   display: flex; flex-direction: column;
-  align-items: center; gap: 4px;
+  align-items: center; gap: 6px;
   width: 100%;
 }
 
 .tool-label {
   font-size: .65rem; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: .06em;
-  text-align: center;
+  text-align: center; font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.collapsible-header {
+  display: flex; align-items: center; justify-content: center;
+  gap: 4px; cursor: pointer; user-select: none;
+  padding: 4px 6px; border-radius: 4px;
+  transition: background .15s;
+  width: 100%;
+}
+.collapsible-header:hover { background: rgba(255,255,255,.05); }
+.collapsible-header .arrow {
+  font-size: .7rem; transition: transform .2s;
+  color: var(--text-muted);
+}
+.collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
+
+.collapsible-content {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 6px; width: 100%;
+  overflow: hidden; transition: max-height .3s ease, opacity .3s ease;
+}
+.collapsible-content.collapsed {
+  max-height: 0 !important; opacity: 0;
 }
 
 .tool-divider {
-  width: 60%; height: 1px;
+  width: 70%; height: 1px;
   background: var(--border);
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .tool-btn {
-  width: 48px; height: 44px;
+  width: 50px; height: 46px;
   background: transparent; border: 1px solid transparent;
   border-radius: var(--radius); font-size: 1.3rem;
   cursor: pointer; transition: background .15s, border-color .15s;
@@ -124,7 +148,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 }
 .color-preset:hover { transform: scale(1.1); border-color: #fff; }
 
-#size-picker { width: 62px; accent-color: var(--accent2); }
+#size-picker { width: 70px; accent-color: var(--accent2); }
 #size-val { font-size: .75rem; color: var(--text-muted); }
 
 .own-erase-label {
@@ -140,19 +164,20 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 /* Token palette */
 #token-palette {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
-  width: 100%;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
+  width: 100%; padding: 0 4px;
 }
 
 .token-swatch {
-  width: 28px; height: 28px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,.3);
   font-size: .72rem; font-weight: 700;
   cursor: pointer; color: #fff;
   display: flex; align-items: center; justify-content: center;
   transition: transform .1s, border-color .15s;
 }
-.token-swatch:hover { transform: scale(1.15); border-color: #fff; }
+.token-swatch:hover { transform: scale(1.1); border-color: #fff; }
+.token-ball-btn { grid-column: span 3; width: 100% !important; border-radius: 8px !important; }
 
 /* Recordings list */
 .recordings-list {

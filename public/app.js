@@ -1002,6 +1002,9 @@ function renderPresetsList() {
       }
     });
   });
+  
+  // Update collapsible section height
+  updateCollapsibleMaxHeight('presets');
 }
 
 document.getElementById('save-preset-btn').addEventListener('click', () => {
@@ -1229,6 +1232,9 @@ function renderRecordingsList() {
       socket?.emit('delete-recording', { recId: +btn.dataset.id });
     });
   });
+  
+  // Update collapsible section height
+  updateCollapsibleMaxHeight('recordings');
 }
 
 function tickReplayBar() {
@@ -1284,6 +1290,42 @@ function doJoin() {
 
 joinBtn.addEventListener('click', doJoin);
 usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+// ── Collapsible sections ──────────────────────────────────────
+function updateCollapsibleMaxHeight(sectionId) {
+  const content = document.getElementById(`${sectionId}-content`);
+  const header = document.querySelector(`.collapsible-header[data-section="${sectionId}"]`);
+  if (content && header && !header.classList.contains('collapsed')) {
+    content.style.maxHeight = content.scrollHeight + 'px';
+  }
+}
+
+document.querySelectorAll('.collapsible-header').forEach(header => {
+  header.addEventListener('click', () => {
+    const section = header.dataset.section;
+    const content = document.getElementById(`${section}-content`);
+    const isCollapsed = header.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+      // Expand
+      header.classList.remove('collapsed');
+      content.classList.remove('collapsed');
+      content.style.maxHeight = content.scrollHeight + 'px';
+    } else {
+      // Collapse
+      header.classList.add('collapsed');
+      content.classList.add('collapsed');
+      content.style.maxHeight = '0';
+    }
+  });
+  
+  // Set initial max-height for transitions
+  const section = header.dataset.section;
+  const content = document.getElementById(`${section}-content`);
+  if (content && !header.classList.contains('collapsed')) {
+    content.style.maxHeight = content.scrollHeight + 'px';
+  }
+});
 
 // ── Resize handling ───────────────────────────────────────────
 window.addEventListener('resize', () => {
