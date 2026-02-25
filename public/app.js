@@ -37,7 +37,32 @@ let isDrawing    = false;
 let currentPath  = [];   // [{x,y}] for current stroke
 let arrowStart   = null; // {x,y} for arrow tool
 let strokeSeq    = 0;    // local stroke ID counter
+let arrowSeq     = 0;    // local arrow ID counter
 let ownEraseOnly = false; // only erase own lines when checked
+
+// ── Per-user undo stack ───────────────────────────────────────
+// Each entry: { type: 'stroke'|'arrow'|'token', id }
+const myUndoStack = [];
+
+function undoLast() {
+  if (!myUndoStack.length) return;
+  const entry = myUndoStack.pop();
+  if (entry.type === 'stroke') {
+    for (let i = allStrokes.length - 1; i >= 0; i--) {
+      if (allStrokes[i].id === entry.id) { allStrokes.splice(i, 1); break; }
+    }
+    socket?.emit('stroke-remove', { ids: [entry.id] });
+    redrawStrokes();
+  } else if (entry.type === 'arrow') {
+    for (let i = allArrows.length - 1; i >= 0; i--) {
+      if (allArrows[i].id === entry.id) { allArrows.splice(i, 1); break; }
+    }
+    socket?.emit('arrow-remove', { ids: [entry.id] });
+    redrawStrokes();
+  } else if (entry.type === 'token') {
+    socket?.emit('token-remove', { id: entry.id });
+  }
+}
 
 // Other users' live strokes: socketId → {points: [{x,y}], color, width}
 const liveStrokes = {};
@@ -374,6 +399,7 @@ liveCanvas.addEventListener('pointerup', e => {
       width: +sizePicker.value
     };
     allStrokes.push(stroke);
+    myUndoStack.push({ type: 'stroke', id: stroke.id });
     socket?.emit('stroke-done', stroke);
     redrawStrokes();
   }
@@ -404,6 +430,7 @@ liveCanvas.addEventListener('pointerup', e => {
         width: +sizePicker.value * 4
       };
       allStrokes.push(stroke);
+      myUndoStack.push({ type: 'stroke', id: stroke.id });
       socket?.emit('stroke-done', stroke);
       redrawStrokes();
     }
@@ -411,14 +438,19 @@ liveCanvas.addEventListener('pointerup', e => {
 
   if (activeTool === 'arrow' && arrowStart && currentPath.length >= 2) {
     const last = currentPath[currentPath.length - 1];
+    const arrowId = `${myId}-a${++arrowSeq}`;
     const arrow = {
+      id: arrowId,
+      socketId: myId,
       x1: arrowStart.x, y1: arrowStart.y,
       x2: last.x,       y2: last.y,
       color: colorPicker.value,
       width: +sizePicker.value,
       style: 'solid'
     };
+    // Server will re-assign a canonical id and broadcast back — use a temp local one
     allArrows.push(arrow);
+    myUndoStack.push({ type: 'arrow', id: arrowId, _pending: true });
     socket?.emit('arrow-done', arrow);
     redrawStrokes();
   }
@@ -436,11 +468,20 @@ liveCanvas.addEventListener('pointerleave', () => {
 // ── Tokens ────────────────────────────────────────────────────
 function createTokenEl(token) {
   const el = document.createElement('div');
-  el.className   = 'token';
-  el.id          = 'token-' + token.id;
-  el.textContent = token.label || '1';
-  el.style.background = token.color;
-  if (token.color === '#ffffff' || token.color === '#fff') el.style.color = '#222';
+  el.id = 'token-' + token.id;
+  if (token.shape === 'ball') {
+    el.className = 'token token-ball';
+    el.textContent = '⚽';
+    el.style.background = 'transparent';
+    el.style.border = 'none';
+    el.style.fontSize = '1.6rem';
+    el.style.boxShadow = 'none';
+  } else {
+    el.className = 'token';
+    el.textContent = token.label || '1';
+    el.style.background = token.color;
+    if (token.color === '#ffffff' || token.color === '#fff') el.style.color = '#222';
+  }
 
   // Place
   positionToken(el, token.x, token.y);
@@ -512,14 +553,17 @@ const tokenCounters = {};
 document.querySelectorAll('.token-swatch').forEach(btn => {
   btn.addEventListener('click', () => {
     const color = btn.dataset.color;
+    const shape = btn.dataset.shape || 'circle';
     tokenCounters[color] = (tokenCounters[color] || 0) + 1;
-    const label = String(tokenCounters[color]);
+    const label = shape === 'ball' ? '⚽' : String(tokenCounters[color]);
     // Place near center
     socket?.emit('token-add', {
       x: PITCH_W / 2 + (Math.random() - .5) * 100,
       y: PITCH_H / 2 + (Math.random() - .5) * 80,
       color,
-      label
+      label,
+      shape,
+      createdBy: myId
     });
   });
 });
@@ -607,9 +651,32 @@ function connectSocket(username) {
     redrawStrokes();
   });
 
-  // Arrow from others
+  // Arrow from others (server echoes back with canonical id)
   socket.on('arrow-done', (arrow) => {
-    allArrows.push(arrow);
+    if (arrow.socketId === myId) {
+      // Replace the local temp arrow with the server-confirmed one
+      const idx = allArrows.findIndex(a => a.socketId === myId && a._pending);
+      if (idx !== -1) {
+        const oldId = allArrows[idx].id;
+        allArrows[idx] = arrow;
+        // Update undo stack entry to use canonical server id
+        const ue = myUndoStack.findLast ? myUndoStack.findLast(e => e._pending && e.id === oldId)
+                                        : [...myUndoStack].reverse().find(e => e._pending && e.id === oldId);
+        if (ue) { ue.id = arrow.id; delete ue._pending; }
+      } else {
+        allArrows.push(arrow);
+      }
+    } else {
+      allArrows.push(arrow);
+    }
+    redrawStrokes();
+  });
+
+  // Arrow removed (undo from any user)
+  socket.on('arrow-remove', ({ ids }) => {
+    for (let i = allArrows.length - 1; i >= 0; i--) {
+      if (ids.includes(allArrows[i].id)) allArrows.splice(i, 1);
+    }
     redrawStrokes();
   });
 
@@ -617,6 +684,10 @@ function connectSocket(username) {
   socket.on('token-add', (token) => {
     tokens[token.id] = token;
     tokenLayer.appendChild(createTokenEl(token));
+    // Push to undo stack if I placed this token
+    if (token.createdBy === myId) {
+      myUndoStack.push({ type: 'token', id: token.id });
+    }
   });
 
   socket.on('token-move', ({ id, x, y }) => {
@@ -685,6 +756,7 @@ document.getElementById('tool-draw').addEventListener('click',   () => setTool('
 document.getElementById('tool-arrow').addEventListener('click',  () => setTool('arrow'));
 document.getElementById('tool-erase').addEventListener('click',  () => setTool('erase'));
 document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
+document.getElementById('tool-undo').addEventListener('click',   () => undoLast());
 
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
 ownEraseCheck?.addEventListener('change', () => { ownEraseOnly = ownEraseCheck.checked; });
@@ -703,6 +775,7 @@ document.getElementById('clear-board-btn').addEventListener('click', () => {
 // Keyboard shortcuts
 window.addEventListener('keydown', e => {
   if (document.activeElement === usernameInput) return;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoLast(); return; }
   if (e.key === 'd' || e.key === 'D') setTool('draw');
   if (e.key === 'a' || e.key === 'A') setTool('arrow');
   if (e.key === 'e' || e.key === 'E') setTool('erase');

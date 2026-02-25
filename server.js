@@ -20,6 +20,7 @@ const state = {
 };
 
 let nextTokenId = 1;
+let nextArrowId  = 1;
 
 // ── Helpers ───────────────────────────────────────────────────
 const USER_COLORS = [
@@ -112,8 +113,18 @@ io.on('connection', (socket) => {
 
   // 7. Arrow added
   socket.on('arrow-done', (arrow) => {
-    state.arrows.push(arrow);
-    socket.broadcast.emit('arrow-done', arrow);
+    const saved = { ...arrow, id: `ar${nextArrowId++}`, socketId: socket.id };
+    state.arrows.push(saved);
+    socket.broadcast.emit('arrow-done', saved);
+  });
+
+  // 7b. Arrow removed (undo)
+  socket.on('arrow-remove', ({ ids }) => {
+    ids.forEach(id => {
+      const idx = state.arrows.findIndex(a => a.id === id);
+      if (idx !== -1) state.arrows.splice(idx, 1);
+    });
+    io.emit('arrow-remove', { ids });
   });
 
   // 8. Clear board
