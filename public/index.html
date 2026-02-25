@@ -27,16 +27,13 @@
       <div class="tool-group">
         <button class="tool-btn active" id="tool-draw"    title="Draw (D)">✏️</button>
         <button class="tool-btn"        id="tool-arrow"   title="Arrow (A)">➡️</button>
-        <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
-        <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
-        <button class="tool-btn"        id="tool-undo"    title="Undo your last action (Ctrl+Z)">↩️</button>
-      </div>
-
-      <div class="tool-group">
         <label class="own-erase-label" title="Dashed arrows">
           <input type="checkbox" id="arrow-dashed-check" />
           <span>Dashed<br>arrows</span>
         </label>
+        <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
+        <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
+        <button class="tool-btn"        id="tool-undo"    title="Undo your last action (Ctrl+Z)">↩️</button>
       </div>
 
       <div class="tool-group">
@@ -48,13 +45,6 @@
         <label class="tool-label">Size</label>
         <input type="range" id="size-picker" min="1" max="20" value="3" title="Pen size" />
         <span id="size-val">3</span>
-      </div>
-
-      <div class="tool-group">
-        <label class="own-erase-label" title="When checked, eraser only removes your own lines">
-          <input type="checkbox" id="own-erase-check" />
-          <span>Own lines<br>only</span>
-        </label>
       </div>
 
       <div class="tool-divider"></div>
@@ -78,6 +68,10 @@
       <div class="tool-divider"></div>
 
       <div class="tool-group">
+        <label class="own-erase-label" title="When checked, eraser only removes your own lines">
+          <input type="checkbox" id="own-erase-check" />
+          <span>Own lines<br>only</span>
+        </label>
         <button id="clear-drawings-btn" class="action-btn" title="Clear drawings">🗑️ Clear Lines</button>
         <button id="clear-board-btn"    class="action-btn danger" title="Clear everything">💥 Clear All</button>
         <button id="screenshot-btn"     class="action-btn" title="Download board as PNG">📸 Screenshot</button>
