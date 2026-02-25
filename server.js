@@ -111,11 +111,19 @@ io.on('connection', (socket) => {
     io.emit('token-remove', { id });
   });
 
+  // 6b. Token label edit
+  socket.on('token-relabel', ({ id, label }) => {
+    if (state.tokens[id]) state.tokens[id].label = label;
+    io.emit('token-relabel', { id, label });
+  });
+
   // 7. Arrow added
   socket.on('arrow-done', (arrow) => {
     const saved = { ...arrow, id: `ar${nextArrowId++}`, socketId: socket.id };
     state.arrows.push(saved);
+    // Broadcast to others, and send confirmed id back to sender separately
     socket.broadcast.emit('arrow-done', saved);
+    socket.emit('arrow-confirmed', { tempId: arrow.id, arrow: saved });
   });
 
   // 7b. Arrow removed (undo)
@@ -131,7 +139,9 @@ io.on('connection', (socket) => {
   socket.on('clear-board', () => {
     state.strokes = [];
     state.arrows = [];
+    state.tokens = {}; // also wipe tokens so late joiners don't see ghosts
     io.emit('clear-board');
+    io.emit('tokens-cleared'); // tell clients to remove all token DOM elements
   });
 
   // 9. Clear drawings only

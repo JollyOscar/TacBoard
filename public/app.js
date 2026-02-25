@@ -25,6 +25,7 @@ const sizeVal       = document.getElementById('size-val');
 const userListEl    = document.getElementById('user-list');
 const toastContainer= document.getElementById('toast-container');
 const ownEraseCheck = document.getElementById('own-erase-check');
+const arrowDashedCheck = document.getElementById('arrow-dashed-check');
 
 // ── State ─────────────────────────────────────────────────────
 let socket;
@@ -39,6 +40,11 @@ let arrowStart   = null; // {x,y} for arrow tool
 let strokeSeq    = 0;    // local stroke ID counter
 let arrowSeq     = 0;    // local arrow ID counter
 let ownEraseOnly = false; // only erase own lines when checked
+let arrowDashed  = false; // dashed arrows
+
+// Throttle timestamps
+let _lastCursorEmit    = 0;
+let _lastTokenMoveEmit = {};
 
 // ── Per-user undo stack ───────────────────────────────────────
 // Each entry: { type: 'stroke'|'arrow'|'token', id }
@@ -352,6 +358,7 @@ let lastMousePos = null;
 liveCanvas.addEventListener('pointerdown', e => {
   if (activeTool === 'select') return;
   isDrawing = true;
+  liveCanvas.setPointerCapture(e.pointerId); // capture so pointerup fires even outside canvas
   const pos = toLogical(e.clientX, e.clientY);
   currentPath = [pos];
   if (activeTool === 'arrow') arrowStart = pos;
@@ -367,8 +374,12 @@ liveCanvas.addEventListener('pointermove', e => {
   const pos = toLogical(e.clientX, e.clientY);
   lastMousePos = pos;
 
-  // Emit cursor
-  socket?.emit('cursor-move', pos);
+  // Emit cursor (throttled to max ~25/sec)
+  const now = Date.now();
+  if (now - _lastCursorEmit > 40) {
+    socket?.emit('cursor-move', pos);
+    _lastCursorEmit = now;
+  }
 
   if (!isDrawing) { if (activeTool === 'erase') redrawLive(); return; }
 
@@ -438,19 +449,18 @@ liveCanvas.addEventListener('pointerup', e => {
 
   if (activeTool === 'arrow' && arrowStart && currentPath.length >= 2) {
     const last = currentPath[currentPath.length - 1];
-    const arrowId = `${myId}-a${++arrowSeq}`;
+    const tempId = `${myId}-a${++arrowSeq}`;
     const arrow = {
-      id: arrowId,
+      id: tempId,
       socketId: myId,
       x1: arrowStart.x, y1: arrowStart.y,
       x2: last.x,       y2: last.y,
       color: colorPicker.value,
       width: +sizePicker.value,
-      style: 'solid'
+      style: arrowDashed ? 'dashed' : 'solid'
     };
-    // Server will re-assign a canonical id and broadcast back — use a temp local one
     allArrows.push(arrow);
-    myUndoStack.push({ type: 'arrow', id: arrowId, _pending: true });
+    myUndoStack.push({ type: 'arrow', id: tempId, _pending: true });
     socket?.emit('arrow-done', arrow);
     redrawStrokes();
   }
@@ -497,8 +507,39 @@ function createTokenEl(token) {
   });
   el.appendChild(del);
 
+  // Double-click to rename (not for ball)
+  if (token.shape !== 'ball') {
+    el.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'token-rename-input';
+      input.value = token.label || '';
+      input.maxLength = 4;
+      const rect2 = canvasStack.getBoundingClientRect();
+      const scaleX = rect2.width  / PITCH_W;
+      const scaleY = rect2.height / PITCH_H;
+      input.style.left = (token.x * scaleX) + 'px';
+      input.style.top  = (token.y * scaleY) + 'px';
+      tokenLayer.appendChild(input);
+      input.focus(); input.select();
+      const commit = () => {
+        const newLabel = input.value.trim() || token.label;
+        input.remove();
+        if (newLabel !== token.label) {
+          token.label = newLabel;
+          el.childNodes[0].textContent = newLabel; // update text node (first child)
+          socket?.emit('token-relabel', { id: token.id, label: newLabel });
+        }
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e2 => { if (e2.key === 'Enter') commit(); if (e2.key === 'Escape') input.remove(); });
+    });
+  }
+
   // Drag
   let dragging = false, ox = 0, oy = 0;
+  let _lastTokenEmit = 0;
   el.addEventListener('pointerdown', e => {
     if (e.target === del) return;
     dragging = true;
@@ -520,12 +561,19 @@ function createTokenEl(token) {
     token.x = Math.max(0, Math.min(PITCH_W, token.x));
     token.y = Math.max(0, Math.min(PITCH_H, token.y));
     positionToken(el, token.x, token.y);
-    socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+    const now = Date.now();
+    if (now - _lastTokenEmit > 33) { // ~30fps
+      socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+      _lastTokenEmit = now;
+    }
     e.stopPropagation();
   });
   el.addEventListener('pointerup', e => {
+    if (!dragging) return;
     dragging = false;
     el.classList.remove('dragging');
+    // Emit final position on pointer up to ensure sync
+    socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
     e.stopPropagation();
   });
 
@@ -654,24 +702,20 @@ function connectSocket(username) {
     redrawStrokes();
   });
 
-  // Arrow from others (server echoes back with canonical id)
+  // Arrow from others (server broadcasts to non-senders)
   socket.on('arrow-done', (arrow) => {
-    if (arrow.socketId === myId) {
-      // Replace the local temp arrow with the server-confirmed one
-      const idx = allArrows.findIndex(a => a.socketId === myId && a._pending);
-      if (idx !== -1) {
-        const oldId = allArrows[idx].id;
-        allArrows[idx] = arrow;
-        // Update undo stack entry to use canonical server id
-        const ue = myUndoStack.findLast ? myUndoStack.findLast(e => e._pending && e.id === oldId)
-                                        : [...myUndoStack].reverse().find(e => e._pending && e.id === oldId);
-        if (ue) { ue.id = arrow.id; delete ue._pending; }
-      } else {
-        allArrows.push(arrow);
-      }
-    } else {
-      allArrows.push(arrow);
-    }
+    allArrows.push(arrow);
+    redrawStrokes();
+  });
+
+  // Arrow confirmed back to sender — replace temp arrow with canonical server id
+  socket.on('arrow-confirmed', ({ tempId, arrow }) => {
+    const idx = allArrows.findIndex(a => a.id === tempId);
+    if (idx !== -1) allArrows[idx] = arrow;
+    // Update undo stack entry
+    const ue = (myUndoStack.findLast ? myUndoStack.findLast(e => e._pending && e.id === tempId)
+                                     : [...myUndoStack].reverse().find(e => e._pending && e.id === tempId));
+    if (ue) { ue.id = arrow.id; delete ue._pending; }
     redrawStrokes();
   });
 
@@ -693,6 +737,15 @@ function connectSocket(username) {
     }
   });
 
+  socket.on('token-relabel', ({ id, label }) => {
+    if (tokens[id]) {
+      tokens[id].label = label;
+      const el = document.getElementById('token-' + id);
+      // Update the visible text node without removing child buttons
+      if (el) el.childNodes[0].textContent = label;
+    }
+  });
+
   socket.on('token-move', ({ id, x, y }) => {
     if (tokens[id]) {
       tokens[id].x = x; tokens[id].y = y;
@@ -710,10 +763,15 @@ function connectSocket(username) {
   // Clear
   socket.on('clear-board', () => {
     allStrokes.length = 0; allArrows.length = 0;
-    // Flush in-flight live strokes so nothing lingers after a clear
     Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
     redrawStrokes();
     liveCtx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
+  });
+
+  // Server cleared all tokens (fired alongside clear-board)
+  socket.on('tokens-cleared', () => {
+    Object.keys(tokens).forEach(k => delete tokens[k]);
+    tokenLayer.innerHTML = '';
   });
 
   // Stroke removal — own-lines-only erase from any user
@@ -732,7 +790,12 @@ function connectSocket(username) {
   socket.on('cursor-remove', ({ socketId }) => removeCursor(socketId));
 
   socket.on('disconnect', () => toast('Disconnected. Reconnecting…'));
-  socket.on('reconnect',  () => toast('Reconnected!'));
+  // Socket.io v4: reconnect fires on the manager
+  socket.io.on('reconnect', () => {
+    toast('Reconnected!');
+    // Re-announce ourselves so we appear in the user list again
+    socket.emit('join', { username: myName });
+  });
 }
 
 // ── User list ─────────────────────────────────────────────────
@@ -762,10 +825,8 @@ document.getElementById('tool-select').addEventListener('click', () => setTool('
 document.getElementById('tool-undo').addEventListener('click',   () => undoLast());
 
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
-ownEraseCheck?.addEventListener('change', () => {
-  ownEraseOnly = ownEraseCheck.checked;
-  updateClearBtnLabels();
-});
+ownEraseCheck?.addEventListener('change',      () => { ownEraseOnly = ownEraseCheck.checked; updateClearBtnLabels(); });
+arrowDashedCheck?.addEventListener('change',   () => { arrowDashed  = arrowDashedCheck.checked; });
 
 function updateClearBtnLabels() {
   const linesBtn = document.getElementById('clear-drawings-btn');
@@ -826,8 +887,7 @@ document.getElementById('clear-board-btn').addEventListener('click', () => {
         .filter(t => t.createdBy === myId)
         .forEach(t => socket?.emit('token-remove', { id: t.id }));
     } else {
-      socket?.emit('clear-board');
-      Object.keys(tokens).forEach(id => socket?.emit('token-remove', { id }));
+      socket?.emit('clear-board'); // server now clears tokens too and emits tokens-cleared
     }
   });
 });
@@ -872,7 +932,19 @@ window.addEventListener('keydown', e => {
   if (e.key === 's' || e.key === 'S') setTool('select');
 });
 
-// ── Join flow ─────────────────────────────────────────────────
+// ── Screenshot ───────────────────────────────────────────────
+document.getElementById('screenshot-btn').addEventListener('click', () => {
+  const combined = document.createElement('canvas');
+  combined.width  = pitchCanvas.width;
+  combined.height = pitchCanvas.height;
+  const ctx = combined.getContext('2d');
+  ctx.drawImage(pitchCanvas,   0, 0);
+  ctx.drawImage(strokesCanvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = 'tac-board.png';
+  link.href = combined.toDataURL('image/png');
+  link.click();
+});
 function doJoin() {
   const name = usernameInput.value.trim();
   if (!name) { usernameInput.focus(); return; }

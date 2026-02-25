@@ -215,7 +215,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 }
 .token:hover .token-delete { display: flex; }
 
-/* ── Remote cursors ───────────────────────────────────────────── */
+/* ── Token rename input ────────────────────────────────────── */
+.token-rename-input {
+  position: absolute;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0,0,0,.7);
+  color: #fff;
+  text-align: center;
+  font-size: .8rem;
+  outline: none;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  pointer-events: all;
+  padding: 0;
+}
 .remote-cursor {
   position: absolute; pointer-events: none;
   transform: translate(0, 0);
