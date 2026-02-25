@@ -1185,6 +1185,108 @@ function endReplay() {
   document.getElementById('replay-time').textContent    = '';
   updateReplayButton();
   toast('⏹ Replay ended — board restored');
+  
+  // Stop video recording if active
+  stopVideoCapture();
+}
+
+// ── Video Capture (MP4 Recording) ────────────────────────────────────────
+function startVideoCapture(recId) {
+  if (!canvasStack) return;
+  
+  try {
+    // Create a MediaRecorder to capture the canvas stack
+    const stream = liveCanvas.captureStream(30); // 30 fps
+    _videoRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 2500000
+    });
+    
+    _videoChunks = [];
+    _capturingForRecId = recId;
+    
+    _videoRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        _videoChunks.push(event.data);
+      }
+    };
+    
+    _videoRecorder.onstop = () => {
+      _capturedVideoBlob = new Blob(_videoChunks, { type: 'video/webm' });
+      _videoChunks = [];
+    };
+    
+    _videoRecorder.start();
+    console.log(`[+] Video capture started for recording ${recId}`);
+  } catch (err) {
+    console.error('[!] Video capture failed:', err);
+    toast('⚠️ Video capture not supported in this browser');
+  }
+}
+
+function stopVideoCapture() {
+  if (_videoRecorder && _videoRecorder.state !== 'inactive') {
+    _videoRecorder.stop();
+    console.log('[+] Video capture stopped');
+  }
+}
+
+function downloadRecordingAsMP4(recId) {
+  // Check if we need to capture first
+  if (_capturedVideoBlob && _capturingForRecId === recId) {
+    // Already captured, download immediately
+    downloadVideoBlob(recId);
+  } else {
+    // Need to replay and capture
+    toast('📽️ Replaying to capture video... Please wait');
+    _capturingForRecId = recId;
+    _selectedRecId = recId;
+    updateReplayButton();
+    
+    // Start capture when replay begins
+    const originalHandler = socket.listeners('replay-started')[0];
+    socket.once('replay-started', (data) => {
+      originalHandler(data);
+      startVideoCapture(recId);
+    });
+    
+    // Download when replay ends
+    const downloadAfterReplay = () => {
+      setTimeout(() => {
+        downloadVideoBlob(recId);
+      }, 500); // Small delay to ensure recording is fully stopped
+    };
+    
+    socket.once('replay-done', () => {
+      downloadAfterReplay();
+    });
+    socket.once('replay-stopped', () => {
+      downloadAfterReplay();
+    });
+    
+    // Trigger replay
+    socket.emit('replay-start', { recId });
+  }
+}
+
+function downloadVideoBlob(recId) {
+  if (!_capturedVideoBlob) {
+    toast('❌ No video captured for this recording');
+    return;
+  }
+  
+  const url = URL.createObjectURL(_capturedVideoBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tac-board-recording-${recId}.webm`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  toast('✅ Video downloaded');
+  _capturedVideoBlob = null;
+  _capturingForRecId = null;
 }
 
 function updateReplayButton() {
@@ -1211,7 +1313,10 @@ function renderRecordingsList() {
         <div class="rec-time">${time}</div>
         <div class="rec-meta">${dur}s · ${rec.eventCount} events</div>
       </div>
-      <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
+      <div class="rec-actions">
+        <button class="rec-download" data-id="${rec.id}" title="Download as MP4">📽️</button>
+        <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
+      </div>
     `;
     list.appendChild(li);
   });
@@ -1230,6 +1335,15 @@ function renderRecordingsList() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       socket?.emit('delete-recording', { recId: +btn.dataset.id });
+    });
+  });
+  
+  // Download handlers
+  list.querySelectorAll('.rec-download').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const recId = +btn.dataset.id;
+      downloadRecordingAsMP4(recId);
     });
   });
   

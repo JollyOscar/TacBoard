@@ -200,14 +200,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .rec-time { font-size: .68rem; font-weight: 600; color: var(--text); }
 .rec-meta { font-size: .62rem; color: var(--text-muted); margin-top: 1px; }
 
-.rec-delete {
+.rec-actions {
+  display: flex; gap: 2px;
+}
+.rec-download, .rec-delete {
   width: 16px; height: 16px; border-radius: 3px;
-  background: var(--danger); border: none; color: #fff;
-  font-size: .75rem; cursor: pointer; display: flex;
-  align-items: center; justify-content: center;
+  border: none; color: #fff; font-size: .7rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
   opacity: 0.7; transition: opacity .1s;
 }
-.rec-delete:hover { opacity: 1; }
+.rec-download { background: var(--accent); font-size: .65rem; }
+.rec-delete { background: var(--danger); font-size: .75rem; }
+.rec-download:hover, .rec-delete:hover { opacity: 1; }
 
 .no-recordings {
   padding: 8px; text-align: center; font-size: .68rem;

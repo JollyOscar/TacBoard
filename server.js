@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -29,8 +30,37 @@ const recordings = [];  // Array of saved recordings: { id, name, timestamp, dur
 let nextRecId = 1;
 
 // ── Board Presets ─────────────────────────────────────────────
-const boardPresets = [];  // Array of saved board states: { id, name, timestamp, strokes, arrows, tokens }
+const PRESETS_FILE = path.join(__dirname, 'board-presets.json');
+let boardPresets = [];  // Array of saved board states: { id, name, timestamp, strokes, arrows, tokens }
 let nextPresetId = 1;
+
+// Load presets from file
+function loadPresets() {
+  try {
+    if (fs.existsSync(PRESETS_FILE)) {
+      const data = fs.readFileSync(PRESETS_FILE, 'utf8');
+      const parsed = JSON.parse(data);
+      boardPresets = parsed.presets || [];
+      nextPresetId = parsed.nextId || 1;
+      console.log(`[+] Loaded ${boardPresets.length} board presets from file`);
+    }
+  } catch (err) {
+    console.error('[!] Error loading presets:', err.message);
+  }
+}
+
+// Save presets to file
+function savePresets() {
+  try {
+    const data = JSON.stringify({
+      presets: boardPresets,
+      nextId: nextPresetId
+    }, null, 2);
+    fs.writeFileSync(PRESETS_FILE, data, 'utf8');
+  } catch (err) {
+    console.error('[!] Error saving presets:', err.message);
+  }
+}
 
 function getBoardPresetsList() {
   return boardPresets.map(p => ({
@@ -324,6 +354,7 @@ io.on('connection', (socket) => {
       tokens: JSON.parse(JSON.stringify(state.tokens))
     };
     boardPresets.push(preset);
+    savePresets(); // Persist to disk
     io.emit('presets-list', getBoardPresetsList());
     socket.emit('preset-saved', { id: preset.id, name: preset.name });
   });
@@ -347,6 +378,7 @@ io.on('connection', (socket) => {
     const preset = boardPresets.find(p => p.id === presetId);
     if (preset) {
       preset.name = newName;
+      savePresets(); // Persist to disk
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -355,6 +387,7 @@ io.on('connection', (socket) => {
     const idx = boardPresets.findIndex(p => p.id === presetId);
     if (idx !== -1) {
       boardPresets.splice(idx, 1);
+      savePresets(); // Persist to disk
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -374,6 +407,8 @@ io.on('connection', (socket) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────
+loadPresets(); // Load saved presets from disk
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Tac Board running → http://localhost:${PORT}`);
