@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tac Board — Soccer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Join screen ─────────────────────────────────────── -->
+  <div id="join-screen">
+    <div class="join-card">
+      <div class="join-logo">⚽ Tac Board</div>
+      <h2>Enter your name to join</h2>
+      <input id="username-input" type="text" placeholder="Your name…" maxlength="20" autofocus />
+      <button id="join-btn">Join Board</button>
+      <p class="join-hint">Share the URL with teammates to collaborate in real-time.</p>
+    </div>
+  </div>
+
+  <!-- ── Main app ────────────────────────────────────────── -->
+  <div id="app" class="hidden">
+
+    <!-- Sidebar toolbar -->
+    <aside id="toolbar">
+      <div class="tool-group">
+        <button class="tool-btn active" id="tool-draw"    title="Draw (D)">✏️</button>
+        <button class="tool-btn"        id="tool-arrow"   title="Arrow (A)">➡️</button>
+        <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
+        <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
+      </div>
+
+      <div class="tool-group">
+        <label class="tool-label">Color</label>
+        <input type="color" id="color-picker" value="#ffffff" title="Pen color" />
+      </div>
+
+      <div class="tool-group">
+        <label class="tool-label">Size</label>
+        <input type="range" id="size-picker" min="1" max="20" value="3" title="Pen size" />
+        <span id="size-val">3</span>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <!-- Token palette -->
+      <div class="tool-group">
+        <label class="tool-label">Add Token</label>
+        <div id="token-palette">
+          <button class="token-swatch" data-color="#e74c3c" data-label="1"  style="background:#e74c3c">1</button>
+          <button class="token-swatch" data-color="#3498db" data-label="1"  style="background:#3498db">1</button>
+          <button class="token-swatch" data-color="#2ecc71" data-label="1"  style="background:#2ecc71">1</button>
+          <button class="token-swatch" data-color="#f39c12" data-label="1"  style="background:#f39c12">1</button>
+          <button class="token-swatch" data-color="#9b59b6" data-label="1"  style="background:#9b59b6">1</button>
+          <button class="token-swatch" data-color="#1abc9c" data-label="1"  style="background:#1abc9c">1</button>
+          <button class="token-swatch" data-color="#ffffff" data-label="1"  style="background:#fff;color:#333;">1</button>
+          <button class="token-swatch" data-color="#222222" data-label="1"  style="background:#222;color:#fff;">1</button>
+        </div>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <div class="tool-group">
+        <button id="clear-drawings-btn" class="action-btn" title="Clear drawings">🗑️ Clear Lines</button>
+        <button id="clear-board-btn"    class="action-btn danger" title="Clear everything">💥 Clear All</button>
+      </div>
+    </aside>
+
+    <!-- Board area -->
+    <main id="board-wrap">
+      <!-- Canvas stack -->
+      <div id="canvas-stack">
+        <canvas id="pitch-canvas"></canvas>
+        <canvas id="strokes-canvas"></canvas>
+        <canvas id="live-canvas"></canvas>
+        <div id="token-layer"></div>
+        <div id="cursor-layer"></div>
+      </div>
+    </main>
+
+    <!-- Right panel — users -->
+    <aside id="user-panel">
+      <h3>🟢 Online</h3>
+      <ul id="user-list"></ul>
+    </aside>
+
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
