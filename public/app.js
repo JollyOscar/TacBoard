@@ -837,12 +837,16 @@ function connectSocket(username) {
     const last = recordings[recordings.length - 1];
     const secs = (last.duration / 1000).toFixed(1);
     toast(`✅ Recording saved — ${secs}s · ${last.eventCount} events`);
+    // Update collapsible height after new recording is added
+    setTimeout(() => updateCollapsibleMaxHeight('recordings'), 50);
   });
 
   socket.on('recordings-list', (recordings) => {
     _recordings = recordings;
     renderRecordingsList();
     updateReplayButton();
+    // Update collapsible height after list updates
+    setTimeout(() => updateCollapsibleMaxHeight('recordings'), 50);
   });
 
   socket.on('replay-init',    applyBoardSnapshot);
@@ -866,6 +870,8 @@ function connectSocket(username) {
   socket.on('presets-list', (presets) => {
     _boardPresets = presets;
     renderPresetsList();
+    // Update collapsible height after list updates
+    setTimeout(() => updateCollapsibleMaxHeight('presets'), 50);
   });
 
   socket.on('preset-saved', ({ id, name }) => {
@@ -1422,10 +1428,11 @@ function updateCollapsibleMaxHeight(sectionId) {
   const content = document.getElementById(`${sectionId}-content`);
   const header = document.querySelector(`.collapsible-header[data-section="${sectionId}"]`);
   if (content && header && !header.classList.contains('collapsed')) {
-    // Use a small delay to ensure DOM is updated
-    setTimeout(() => {
-      content.style.maxHeight = content.scrollHeight + 'px';
-    }, 0);
+    // Calculate and set the proper max-height
+    const contentHeight = content.scrollHeight;
+    if (contentHeight > 0) {
+      content.style.maxHeight = contentHeight + 'px';
+    }
   }
 }
 
@@ -1448,14 +1455,14 @@ document.querySelectorAll('.collapsible-header').forEach(header => {
     }
   });
   
-  // Set initial max-height for transitions
+  // Set initial max-height after a delay to allow content to load
   const section = header.dataset.section;
   const content = document.getElementById(`${section}-content`);
   if (content && !header.classList.contains('collapsed')) {
-    // Set a generous initial max-height
-    setTimeout(() => {
-      content.style.maxHeight = content.scrollHeight + 'px';
-    }, 100);
+    // Initial update after DOM is ready
+    setTimeout(() => updateCollapsibleMaxHeight(section), 200);
+    // Another update after socket connection establishes (for recordings/presets)
+    setTimeout(() => updateCollapsibleMaxHeight(section), 1500);
   }
 });
 
