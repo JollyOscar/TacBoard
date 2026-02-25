@@ -1410,7 +1410,10 @@ function updateCollapsibleMaxHeight(sectionId) {
   const content = document.getElementById(`${sectionId}-content`);
   const header = document.querySelector(`.collapsible-header[data-section="${sectionId}"]`);
   if (content && header && !header.classList.contains('collapsed')) {
-    content.style.maxHeight = content.scrollHeight + 'px';
+    // Use a small delay to ensure DOM is updated
+    setTimeout(() => {
+      content.style.maxHeight = content.scrollHeight + 'px';
+    }, 0);
   }
 }
 
@@ -1437,8 +1440,24 @@ document.querySelectorAll('.collapsible-header').forEach(header => {
   const section = header.dataset.section;
   const content = document.getElementById(`${section}-content`);
   if (content && !header.classList.contains('collapsed')) {
-    content.style.maxHeight = content.scrollHeight + 'px';
+    // Set a generous initial max-height
+    setTimeout(() => {
+      content.style.maxHeight = content.scrollHeight + 'px';
+    }, 100);
   }
+});
+
+// Update collapsible sections when content changes
+const resizeObserver = new ResizeObserver(() => {
+  ['tokens', 'recordings', 'presets'].forEach(sectionId => {
+    updateCollapsibleMaxHeight(sectionId);
+  });
+});
+
+// Observe the collapsible content areas
+['tokens', 'recordings', 'presets'].forEach(sectionId => {
+  const content = document.getElementById(`${sectionId}-content`);
+  if (content) resizeObserver.observe(content);
 });
 
 // ── Resize handling ───────────────────────────────────────────

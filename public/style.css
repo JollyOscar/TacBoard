@@ -181,7 +181,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 /* Recordings list */
 .recordings-list {
-  list-style: none; width: 100%; max-height: 140px; overflow-y: auto;
+  list-style: none; width: 100%; max-height: 280px; overflow-y: auto;
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   padding: 2px;
 }
@@ -220,7 +220,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 /* Board Presets list */
 .presets-list {
-  list-style: none; width: 100%; max-height: 140px; overflow-y: auto;
+  list-style: none; width: 100%; max-height: 280px; overflow-y: auto;
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   padding: 2px; margin-top: 4px;
 }
