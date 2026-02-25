@@ -152,6 +152,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .action-btn:hover { background: #343d60; }
 .action-btn.danger:hover { background: #5a1f1f; border-color: var(--danger); }
 .action-btn.armed { background: #5a2a00; border-color: #f39c12; color: #f39c12; animation: pulse-arm .5s infinite alternate; }
+.action-btn.recording { background: #5a0000; border-color: #e74c3c; color: #ff6b6b; animation: pulse-rec .7s infinite alternate; }
+@keyframes pulse-rec { from { opacity: 1; } to { opacity: .55; } }
 @keyframes pulse-arm {
   from { opacity: 1; }
   to   { opacity: .65; }

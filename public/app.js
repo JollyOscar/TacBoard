@@ -43,8 +43,7 @@ let ownEraseOnly = false; // only erase own lines when checked
 let arrowDashed  = false; // dashed arrows
 
 // Throttle timestamps
-let _lastCursorEmit    = 0;
-let _lastTokenMoveEmit = {};
+let _lastCursorEmit = 0;
 
 // ── Per-user undo stack ───────────────────────────────────────
 // Each entry: { type: 'stroke'|'arrow'|'token', id }
@@ -932,14 +931,127 @@ window.addEventListener('keydown', e => {
   if (e.key === 's' || e.key === 'S') setTool('select');
 });
 
+// ── Recording ────────────────────────────────────────────────
+let _recorder      = null;
+let _recordChunks  = [];
+let _recordRafId   = null;
+let _recordStartMs = 0;
+const RECORD_MAX_MS = 30000;
+
+function drawCompositeFrame(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(pitchCanvas,   0, 0, w, h);
+  ctx.drawImage(strokesCanvas, 0, 0, w, h);
+  ctx.drawImage(liveCanvas,    0, 0, w, h);
+  // Draw tokens manually (they live in the DOM, not a canvas)
+  Object.values(tokens).forEach(t => drawTokenFrame(ctx, t, w, h));
+}
+
+function drawTokenFrame(ctx, t, w, h) {
+  const sx = w / PITCH_W;
+  const sy = h / PITCH_H;
+  const cx = t.x * sx;
+  const cy = t.y * sy;
+  const r  = 18 * (w / pitchCanvas.width); // match 36px CSS token radius
+
+  ctx.save();
+  if (t.shape === 'ball') {
+    ctx.font = `${r * 1.6}px serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('⚽', cx, cy);
+  } else {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = t.color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth   = Math.max(1, r * 0.1);
+    ctx.stroke();
+    ctx.font         = `bold ${Math.max(8, r * 0.8)}px sans-serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle    = (t.color === '#ffffff' || t.color === '#fff') ? '#222' : '#fff';
+    ctx.shadowColor  = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur   = 2;
+    ctx.fillText(t.label || '', cx, cy);
+    ctx.shadowBlur   = 0;
+  }
+  ctx.restore();
+}
+
+function startRecording() {
+  const recBtn = document.getElementById('record-btn');
+  const w = pitchCanvas.width;
+  const h = pitchCanvas.height;
+
+  const composite = document.createElement('canvas');
+  composite.width  = w;
+  composite.height = h;
+  const ctx = composite.getContext('2d');
+
+  const stream   = composite.captureStream(30);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9'
+    : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+
+  _recorder     = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  _recordChunks = [];
+
+  _recorder.ondataavailable = e => { if (e.data.size > 0) _recordChunks.push(e.data); };
+  _recorder.onstop = () => {
+    const blob = new Blob(_recordChunks, { type: _recorder.mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'tac-board-recording.webm'; a.click();
+    URL.revokeObjectURL(url);
+    _recordChunks = [];
+    recBtn.textContent = '⏺ Record';
+    recBtn.classList.remove('recording');
+    cancelAnimationFrame(_recordRafId);
+    toast('✅ Recording saved!');
+  };
+
+  _recorder.start(100);
+  _recordStartMs = Date.now();
+  recBtn.textContent = '⏹ Stop (0s)';
+  recBtn.classList.add('recording');
+  toast('🔴 Recording started — max 30s');
+
+  const tick = () => {
+    const elapsed = Date.now() - _recordStartMs;
+    recBtn.textContent = `⏹ Stop (${Math.floor(elapsed / 1000)}s)`;
+    if (composite.width !== pitchCanvas.width || composite.height !== pitchCanvas.height) {
+      composite.width  = pitchCanvas.width;
+      composite.height = pitchCanvas.height;
+    }
+    drawCompositeFrame(ctx, composite.width, composite.height);
+    if (elapsed >= RECORD_MAX_MS) { stopRecording(); return; }
+    _recordRafId = requestAnimationFrame(tick);
+  };
+  _recordRafId = requestAnimationFrame(tick);
+}
+
+function stopRecording() {
+  cancelAnimationFrame(_recordRafId);
+  if (_recorder && _recorder.state !== 'inactive') _recorder.stop();
+}
+
+document.getElementById('record-btn').addEventListener('click', () => {
+  if (_recorder && _recorder.state === 'recording') {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
 // ── Screenshot ───────────────────────────────────────────────
 document.getElementById('screenshot-btn').addEventListener('click', () => {
   const combined = document.createElement('canvas');
   combined.width  = pitchCanvas.width;
   combined.height = pitchCanvas.height;
   const ctx = combined.getContext('2d');
-  ctx.drawImage(pitchCanvas,   0, 0);
-  ctx.drawImage(strokesCanvas, 0, 0);
+  drawCompositeFrame(ctx, combined.width, combined.height);
   const link = document.createElement('a');
   link.download = 'tac-board.png';
   link.href = combined.toDataURL('image/png');
