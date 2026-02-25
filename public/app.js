@@ -679,6 +679,8 @@ function connectSocket(username) {
 
     updateUserList(users);
     toast(`Welcome, ${you.username}! Color: <span style="color:${you.color}">■</span>`);
+    // Request recordings list when joining
+    socket.emit('get-recordings');
   });
 
   socket.on('user-joined', (user) => {
@@ -772,6 +774,8 @@ function connectSocket(username) {
   socket.on('tokens-cleared', () => {
     Object.keys(tokens).forEach(k => delete tokens[k]);
     tokenLayer.innerHTML = '';
+    // Reset token counters so labels stay in sync across all clients
+    Object.keys(tokenCounters).forEach(k => delete tokenCounters[k]);
   });
 
   // Stroke removal — own-lines-only erase from any user
@@ -803,19 +807,29 @@ function connectSocket(username) {
     const recBtn = document.getElementById('record-btn');
     recBtn.textContent = '⏹ Stop Rec';
     recBtn.classList.add('recording');
-    document.getElementById('replay-btn').disabled = true;
+    updateReplayButton();
     toast('🔴 Recording started');
   });
 
-  socket.on('recording-ready', ({ duration, eventCount }) => {
+  socket.on('recording-saved', (recordings) => {
     _recActive = false;
-    _replayDuration = duration;
+    _recordings = recordings;
     const recBtn = document.getElementById('record-btn');
     recBtn.textContent = '⏺ Record';
     recBtn.classList.remove('recording');
-    document.getElementById('replay-btn').disabled = false;
-    const secs = (duration / 1000).toFixed(1);
-    toast(`✅ Recording ready — ${secs}s · ${eventCount} events`);
+    // Auto-select the newest recording
+    if (recordings.length) _selectedRecId = recordings[recordings.length - 1].id;
+    renderRecordingsList();
+    updateReplayButton();
+    const last = recordings[recordings.length - 1];
+    const secs = (last.duration / 1000).toFixed(1);
+    toast(`✅ Recording saved — ${secs}s · ${last.eventCount} events`);
+  });
+
+  socket.on('recordings-list', (recordings) => {
+    _recordings = recordings;
+    renderRecordingsList();
+    updateReplayButton();
   });
 
   socket.on('replay-init',    applyBoardSnapshot);
@@ -827,7 +841,7 @@ function connectSocket(username) {
     _replayStartMs  = Date.now();
     liveCanvas.style.pointerEvents = 'none';
     document.getElementById('replay-bar').classList.remove('hidden');
-    document.getElementById('replay-btn').disabled = true;
+    updateReplayButton();
     tickReplayBar();
     toast('▶ Replaying for everyone…');
   });
@@ -1035,8 +1049,55 @@ function endReplay() {
   document.getElementById('replay-bar').classList.add('hidden');
   document.getElementById('replay-progress').style.width = '0%';
   document.getElementById('replay-time').textContent    = '';
-  document.getElementById('replay-btn').disabled = false;
+  updateReplayButton();
   toast('⏹ Replay ended — board restored');
+}
+
+function updateReplayButton() {
+  const btn = document.getElementById('replay-btn');
+  btn.disabled = !_selectedRecId || isReplaying || _recActive;
+}
+
+function renderRecordingsList() {
+  const list = document.getElementById('recordings-list');
+  if (!_recordings.length) {
+    list.innerHTML = '<li class="no-recordings">No recordings yet</li>';
+    _selectedRecId = null;
+    updateReplayButton();
+    return;
+  }
+  list.innerHTML = '';
+  _recordings.forEach(rec => {
+    const li = document.createElement('li');
+    li.className = 'recording-item' + (rec.id === _selectedRecId ? ' selected' : '');
+    const time = new Date(rec.timestamp).toLocaleTimeString();
+    const dur = (rec.duration / 1000).toFixed(1);
+    li.innerHTML = `
+      <div class="rec-info" data-id="${rec.id}">
+        <div class="rec-time">${time}</div>
+        <div class="rec-meta">${dur}s · ${rec.eventCount} events</div>
+      </div>
+      <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
+    `;
+    list.appendChild(li);
+  });
+
+  // Select handlers
+  list.querySelectorAll('.rec-info').forEach(el => {
+    el.addEventListener('click', () => {
+      _selectedRecId = +el.dataset.id;
+      renderRecordingsList();
+      updateReplayButton();
+    });
+  });
+
+  // Delete handlers
+  list.querySelectorAll('.rec-delete').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      socket?.emit('delete-recording', { recId: +btn.dataset.id });
+    });
+  });
 }
 
 function tickReplayBar() {
@@ -1059,8 +1120,8 @@ document.getElementById('record-btn').addEventListener('click', () => {
 });
 
 document.getElementById('replay-btn').addEventListener('click', () => {
-  if (isReplaying || _recActive || !socket) return;
-  socket.emit('replay-start');
+  if (isReplaying || _recActive || !_selectedRecId || !socket) return;
+  socket.emit('replay-start', { recId: _selectedRecId });
 });
 
 document.getElementById('replay-stop-btn').addEventListener('click', () => {

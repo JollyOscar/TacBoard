@@ -67,6 +67,16 @@
 
       <div class="tool-divider"></div>
 
+      <!-- Recordings list -->
+      <div class="tool-group">
+        <label class="tool-label">Recordings</label>
+        <ul id="recordings-list" class="recordings-list">
+          <li class="no-recordings">No recordings yet</li>
+        </ul>
+      </div>
+
+      <div class="tool-divider"></div>
+
       <div class="tool-group">
         <label class="own-erase-label" title="When checked, eraser only removes your own lines">
           <input type="checkbox" id="own-erase-check" />
@@ -76,7 +86,7 @@
         <button id="clear-board-btn"    class="action-btn danger" title="Clear everything">💥 Clear All</button>
         <button id="screenshot-btn"     class="action-btn" title="Download board as PNG">📸 Screenshot</button>
         <button id="record-btn"         class="action-btn" title="Record actions on the board for playback">⏺ Record</button>
-        <button id="replay-btn"          class="action-btn" disabled title="Replay the last recording on the board for everyone">▶ Replay</button>
+        <button id="replay-btn"          class="action-btn" disabled title="Replay the selected recording on the board for everyone">▶ Replay</button>
       </div>
     </aside>
 

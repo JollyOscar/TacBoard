@@ -24,7 +24,9 @@ let nextArrowId  = 1;
 
 // ── Recording / Replay ───────────────────────────────────────
 let rec = { active: false, start: 0, snapshot: null, timeline: [] };
-let rep = { active: false, timers: [], preSnap: null };
+let rep = { active: false, timers: [], preSnap: null, currentRecId: null };
+const recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
+let nextRecId = 1;
 
 function recordEvent(event, data) {
   if (!rec.active) return;
@@ -43,6 +45,7 @@ function finishReplay() {
   rep.timers.forEach(clearTimeout);
   rep.timers = [];
   rep.active = false;
+  rep.currentRecId = null;
   const s = rep.preSnap;
   state.strokes = s.strokes;
   state.arrows  = s.arrows;
@@ -55,6 +58,16 @@ function finishReplay() {
     tokens:  Object.values(s.tokens)
   });
   io.emit('replay-done');
+}
+
+function getRecordingsList() {
+  return recordings.map(r => ({
+    id: r.id,
+    name: r.name,
+    timestamp: r.timestamp,
+    duration: r.duration,
+    eventCount: r.eventCount
+  }));
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -223,47 +236,69 @@ io.on('connection', (socket) => {
     const duration = rec.timeline.length
       ? rec.timeline[rec.timeline.length - 1].t
       : 0;
-    io.emit('recording-ready', { duration, eventCount: rec.timeline.length });
+    const savedRec = {
+      id: nextRecId++,
+      name: `Recording ${new Date().toLocaleString()}`,
+      timestamp: Date.now(),
+      duration,
+      eventCount: rec.timeline.length,
+      snapshot: rec.snapshot,
+      timeline: rec.timeline
+    };
+    recordings.push(savedRec);
+    io.emit('recording-saved', getRecordingsList());
   });
 
   // 10c. Replay controls
-  socket.on('replay-start', () => {
-    if (rep.active || !rec.snapshot) return;
-    rep.active  = true;
-    rep.preSnap = snapState();
+  socket.on('replay-start', ({ recId }) => {
+    if (rep.active) return;
+    const recording = recordings.find(r => r.id === recId);
+    if (!recording) return;
+
+    rep.active       = true;
+    rep.currentRecId = recId;
+    rep.preSnap      = snapState();
 
     // Temporarily set server state to recording snapshot so late-joiners see it
-    state.strokes = JSON.parse(JSON.stringify(rec.snapshot.strokes));
-    state.arrows  = JSON.parse(JSON.stringify(rec.snapshot.arrows));
-    state.tokens  = JSON.parse(JSON.stringify(rec.snapshot.tokens));
-
-    const duration = rec.timeline.length
-      ? rec.timeline[rec.timeline.length - 1].t
-      : 0;
+    state.strokes = JSON.parse(JSON.stringify(recording.snapshot.strokes));
+    state.arrows  = JSON.parse(JSON.stringify(recording.snapshot.arrows));
+    state.tokens  = JSON.parse(JSON.stringify(recording.snapshot.tokens));
 
     io.emit('clear-board');
     io.emit('tokens-cleared');
-    io.emit('replay-started', { duration });
+    io.emit('replay-started', { duration: recording.duration, recId });
     // Small delay so clients clear before snapshot arrives
     setTimeout(() => {
       io.emit('replay-init', {
-        strokes: rec.snapshot.strokes,
-        arrows:  rec.snapshot.arrows,
-        tokens:  Object.values(rec.snapshot.tokens)
+        strokes: recording.snapshot.strokes,
+        arrows:  recording.snapshot.arrows,
+        tokens:  Object.values(recording.snapshot.tokens)
       });
     }, 150);
 
     rep.timers = [];
-    rec.timeline.forEach(entry => {
+    recording.timeline.forEach(entry => {
       const tid = setTimeout(() => io.emit(entry.event, entry.data), entry.t + 350);
       rep.timers.push(tid);
     });
-    const endTid = setTimeout(finishReplay, duration + 900);
+    const endTid = setTimeout(finishReplay, recording.duration + 900);
     rep.timers.push(endTid);
   });
 
   socket.on('replay-stop', () => {
     if (rep.active) finishReplay();
+  });
+
+  socket.on('get-recordings', () => {
+    socket.emit('recordings-list', getRecordingsList());
+  });
+
+  socket.on('delete-recording', ({ recId }) => {
+    const idx = recordings.findIndex(r => r.id === recId);
+    if (idx !== -1) {
+      recordings.splice(idx, 1);
+      io.emit('recordings-list', getRecordingsList());
+    }
   });
 
   // 11. Disconnect
