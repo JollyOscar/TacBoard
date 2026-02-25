@@ -762,17 +762,73 @@ document.getElementById('tool-select').addEventListener('click', () => setTool('
 document.getElementById('tool-undo').addEventListener('click',   () => undoLast());
 
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
-ownEraseCheck?.addEventListener('change', () => { ownEraseOnly = ownEraseCheck.checked; });
+ownEraseCheck?.addEventListener('change', () => {
+  ownEraseOnly = ownEraseCheck.checked;
+  updateClearBtnLabels();
+});
+
+function updateClearBtnLabels() {
+  const linesBtn = document.getElementById('clear-drawings-btn');
+  const allBtn   = document.getElementById('clear-board-btn');
+  if (!linesBtn || !allBtn) return;
+  // Don't overwrite while armed
+  if (linesBtn.dataset.armed !== '1') linesBtn.textContent = ownEraseOnly ? '🗑️ Clear My Lines' : '🗑️ Clear Lines';
+  if (allBtn.dataset.armed   !== '1') allBtn.textContent   = ownEraseOnly ? '💥 Clear My Stuff'  : '💥 Clear All';
+}
 
 document.getElementById('clear-drawings-btn').addEventListener('click', () => {
-  armConfirm('clear-drawings-btn', '🗑️ Clear Lines', 'Sure? Click again', () => {
-    socket?.emit('clear-drawings');
+  const idleLabel = ownEraseOnly ? '🗑️ Clear My Lines' : '🗑️ Clear Lines';
+  armConfirm('clear-drawings-btn', idleLabel, 'Sure? Click again', () => {
+    if (ownEraseOnly) {
+      // Remove only my own strokes and arrows
+      const myStrokeIds = allStrokes.filter(s => s.socketId === myId).map(s => s.id).filter(Boolean);
+      const myArrowIds  = allArrows.filter(a => a.socketId === myId).map(a => a.id).filter(Boolean);
+      if (myStrokeIds.length) {
+        for (let i = allStrokes.length - 1; i >= 0; i--) {
+          if (myStrokeIds.includes(allStrokes[i].id)) allStrokes.splice(i, 1);
+        }
+        socket?.emit('stroke-remove', { ids: myStrokeIds });
+      }
+      if (myArrowIds.length) {
+        for (let i = allArrows.length - 1; i >= 0; i--) {
+          if (myArrowIds.includes(allArrows[i].id)) allArrows.splice(i, 1);
+        }
+        socket?.emit('arrow-remove', { ids: myArrowIds });
+      }
+      if (myStrokeIds.length || myArrowIds.length) redrawStrokes();
+    } else {
+      socket?.emit('clear-drawings');
+    }
   });
 });
 document.getElementById('clear-board-btn').addEventListener('click', () => {
-  armConfirm('clear-board-btn', '💥 Clear All', '⚠️ Click to confirm', () => {
-    socket?.emit('clear-board');
-    Object.keys(tokens).forEach(id => socket?.emit('token-remove', { id }));
+  const idleLabel = ownEraseOnly ? '💥 Clear My Stuff' : '💥 Clear All';
+  armConfirm('clear-board-btn', idleLabel, '⚠️ Click to confirm', () => {
+    if (ownEraseOnly) {
+      // Remove only my own strokes, arrows, and tokens
+      const myStrokeIds = allStrokes.filter(s => s.socketId === myId).map(s => s.id).filter(Boolean);
+      const myArrowIds  = allArrows.filter(a => a.socketId === myId).map(a => a.id).filter(Boolean);
+      if (myStrokeIds.length) {
+        for (let i = allStrokes.length - 1; i >= 0; i--) {
+          if (myStrokeIds.includes(allStrokes[i].id)) allStrokes.splice(i, 1);
+        }
+        socket?.emit('stroke-remove', { ids: myStrokeIds });
+      }
+      if (myArrowIds.length) {
+        for (let i = allArrows.length - 1; i >= 0; i--) {
+          if (myArrowIds.includes(allArrows[i].id)) allArrows.splice(i, 1);
+        }
+        socket?.emit('arrow-remove', { ids: myArrowIds });
+      }
+      if (myStrokeIds.length || myArrowIds.length) redrawStrokes();
+      // Remove only my own tokens (those I placed, tracked by createdBy)
+      Object.values(tokens)
+        .filter(t => t.createdBy === myId)
+        .forEach(t => socket?.emit('token-remove', { id: t.id }));
+    } else {
+      socket?.emit('clear-board');
+      Object.keys(tokens).forEach(id => socket?.emit('token-remove', { id }));
+    }
   });
 });
 
