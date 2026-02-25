@@ -605,6 +605,9 @@ function connectSocket(username) {
 
   socket.on('connect', () => {
     myId = socket.id;
+    // Flush stale live previews from previous session so nothing lingers on reconnect
+    Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
+    redrawLive();
     socket.emit('join', { username });
   });
 
@@ -762,20 +765,51 @@ sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.va
 ownEraseCheck?.addEventListener('change', () => { ownEraseOnly = ownEraseCheck.checked; });
 
 document.getElementById('clear-drawings-btn').addEventListener('click', () => {
-  if (confirm('Clear all drawings?')) socket?.emit('clear-drawings');
+  armConfirm('clear-drawings-btn', '🗑️ Clear Lines', 'Sure? Click again', () => {
+    socket?.emit('clear-drawings');
+  });
 });
 document.getElementById('clear-board-btn').addEventListener('click', () => {
-  if (confirm('Clear everything including tokens?')) {
+  armConfirm('clear-board-btn', '💥 Clear All', '⚠️ Click to confirm', () => {
     socket?.emit('clear-board');
-    // Also clear tokens locally + server-side via individual removes
     Object.keys(tokens).forEach(id => socket?.emit('token-remove', { id }));
-  }
+  });
 });
 
+// Safe two-click confirmation — no native confirm() that can be triggered by stray keypresses
+const _armTimers = {};
+function armConfirm(btnId, labelIdle, labelArmed, action) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    // Second click — fire
+    btn.dataset.armed = '0';
+    clearTimeout(_armTimers[btnId]);
+    btn.textContent = labelIdle;
+    btn.classList.remove('armed');
+    action();
+  } else {
+    // First click — arm
+    btn.dataset.armed = '1';
+    btn.textContent = labelArmed;
+    btn.classList.add('armed');
+    _armTimers[btnId] = setTimeout(() => {
+      btn.dataset.armed = '0';
+      btn.textContent = labelIdle;
+      btn.classList.remove('armed');
+    }, 3000);
+  }
+}
+
 // Keyboard shortcuts
+let _windowJustFocused = false;
+window.addEventListener('focus', () => { _windowJustFocused = true; setTimeout(() => { _windowJustFocused = false; }, 300); });
 window.addEventListener('keydown', e => {
   if (document.activeElement === usernameInput) return;
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoLast(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    if (_windowJustFocused) return; // ignore stray Ctrl+Z from Ctrl+Tab
+    e.preventDefault(); undoLast(); return;
+  }
   if (e.key === 'd' || e.key === 'D') setTool('draw');
   if (e.key === 'a' || e.key === 'A') setTool('arrow');
   if (e.key === 'e' || e.key === 'E') setTool('erase');
