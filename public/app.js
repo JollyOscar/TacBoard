@@ -19,11 +19,12 @@ const pitchCtx     = pitchCanvas.getContext('2d');
 const strokesCtx   = strokesCanvas.getContext('2d');
 const liveCtx      = liveCanvas.getContext('2d');
 
-const colorPicker  = document.getElementById('color-picker');
-const sizePicker   = document.getElementById('size-picker');
-const sizeVal      = document.getElementById('size-val');
-const userListEl   = document.getElementById('user-list');
-const toastContainer = document.getElementById('toast-container');
+const colorPicker   = document.getElementById('color-picker');
+const sizePicker    = document.getElementById('size-picker');
+const sizeVal       = document.getElementById('size-val');
+const userListEl    = document.getElementById('user-list');
+const toastContainer= document.getElementById('toast-container');
+const ownEraseCheck = document.getElementById('own-erase-check');
 
 // ── State ─────────────────────────────────────────────────────
 let socket;
@@ -31,10 +32,12 @@ let myId    = null;
 let myColor = '#ffffff';
 let myName  = '';
 
-let activeTool = 'draw'; // draw | arrow | erase | select
-let isDrawing  = false;
-let currentPath= [];   // [{x,y}] for current stroke
-let arrowStart = null; // {x,y} for arrow tool
+let activeTool   = 'draw'; // draw | arrow | erase | select
+let isDrawing    = false;
+let currentPath  = [];   // [{x,y}] for current stroke
+let arrowStart   = null; // {x,y} for arrow tool
+let strokeSeq    = 0;    // local stroke ID counter
+let ownEraseOnly = false; // only erase own lines when checked
 
 // Other users' live strokes: socketId → {points: [{x,y}], color, width}
 const liveStrokes = {};
@@ -245,6 +248,19 @@ function toPixelSize(logicalSize) {
   return logicalSize * (liveCanvas.width / PITCH_W);
 }
 
+// Check whether an erase path comes within `radius` (logical) of any stroke point
+function strokeHitsErasePath(stroke, erasePath, radius) {
+  if (!stroke.points) return false;
+  const r2 = radius * radius;
+  for (const ep of erasePath) {
+    for (const sp of stroke.points) {
+      const dx = ep.x - sp.x, dy = ep.y - sp.y;
+      if (dx * dx + dy * dy <= r2) return true;
+    }
+  }
+  return false;
+}
+
 // ── Live drawing canvas ───────────────────────────────────────
 function redrawLive() {
   liveCtx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
@@ -252,14 +268,25 @@ function redrawLive() {
   // Render other users' active strokes
   Object.values(liveStrokes).forEach(s => {
     if (!s.points || s.points.length < 2) return;
+    liveCtx.save();
+    if (s.tool === 'erase') {
+      // Show a dashed outline so the eraser is visible but doesn't paint over the board
+      liveCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+      liveCtx.lineWidth   = toPixelSize(s.width) * 4;
+      liveCtx.setLineDash([7, 5]);
+    } else {
+      liveCtx.strokeStyle = s.color;
+      liveCtx.lineWidth   = toPixelSize(s.width);
+      liveCtx.setLineDash([]);
+    }
+    liveCtx.lineCap  = 'round';
+    liveCtx.lineJoin = 'round';
     liveCtx.beginPath();
-    liveCtx.strokeStyle = s.color;
-    liveCtx.lineWidth   = toPixelSize(s.width);
-    liveCtx.lineCap     = 'round'; liveCtx.lineJoin = 'round';
     const p0 = toPixel(s.points[0].x, s.points[0].y);
     liveCtx.moveTo(p0.x, p0.y);
     s.points.forEach(p => { const px = toPixel(p.x, p.y); liveCtx.lineTo(px.x, px.y); });
     liveCtx.stroke();
+    liveCtx.restore();
   });
 
   // Current user's own live stroke
@@ -339,6 +366,8 @@ liveCanvas.addEventListener('pointerup', e => {
 
   if (activeTool === 'draw' && currentPath.length >= 2) {
     const stroke = {
+      id: `${myId}-${++strokeSeq}`,
+      socketId: myId,
       tool: 'draw',
       points: [...currentPath],
       color: colorPicker.value,
@@ -350,15 +379,34 @@ liveCanvas.addEventListener('pointerup', e => {
   }
 
   if (activeTool === 'erase' && currentPath.length >= 2) {
-    const stroke = {
-      tool: 'erase',
-      points: [...currentPath],
-      color: 'rgba(0,0,0,1)',
-      width: +sizePicker.value * 4
-    };
-    allStrokes.push(stroke);
-    socket?.emit('stroke-done', stroke);
-    redrawStrokes();
+    if (ownEraseOnly) {
+      // Proximity-based: remove only my own strokes that the erase path touches
+      const eraserRadius = +sizePicker.value * 4;
+      const toRemove = allStrokes
+        .filter(s => s.socketId === myId && strokeHitsErasePath(s, currentPath, eraserRadius))
+        .map(s => s.id)
+        .filter(Boolean);
+      if (toRemove.length) {
+        for (let i = allStrokes.length - 1; i >= 0; i--) {
+          if (toRemove.includes(allStrokes[i].id)) allStrokes.splice(i, 1);
+        }
+        socket?.emit('stroke-remove', { ids: toRemove });
+        redrawStrokes();
+      }
+    } else {
+      // Canvas composite erase — removes all lines underneath
+      const stroke = {
+        id: `${myId}-${++strokeSeq}`,
+        socketId: myId,
+        tool: 'erase',
+        points: [...currentPath],
+        color: 'rgba(0,0,0,1)',
+        width: +sizePicker.value * 4
+      };
+      allStrokes.push(stroke);
+      socket?.emit('stroke-done', stroke);
+      redrawStrokes();
+    }
   }
 
   if (activeTool === 'arrow' && arrowStart && currentPath.length >= 2) {
@@ -588,8 +636,18 @@ function connectSocket(username) {
   // Clear
   socket.on('clear-board', () => {
     allStrokes.length = 0; allArrows.length = 0;
+    // Flush in-flight live strokes so nothing lingers after a clear
+    Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
     redrawStrokes();
     liveCtx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
+  });
+
+  // Stroke removal — own-lines-only erase from any user
+  socket.on('stroke-remove', ({ ids }) => {
+    for (let i = allStrokes.length - 1; i >= 0; i--) {
+      if (ids.includes(allStrokes[i].id)) allStrokes.splice(i, 1);
+    }
+    redrawStrokes();
   });
 
   // Cursors
@@ -629,6 +687,7 @@ document.getElementById('tool-erase').addEventListener('click',  () => setTool('
 document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
 
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
+ownEraseCheck?.addEventListener('change', () => { ownEraseOnly = ownEraseCheck.checked; });
 
 document.getElementById('clear-drawings-btn').addEventListener('click', () => {
   if (confirm('Clear all drawings?')) socket?.emit('clear-drawings');

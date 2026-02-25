@@ -71,10 +71,20 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 3. Completed stroke — store it
+  // 3. Completed stroke — store it (tag with sender's socketId)
   socket.on('stroke-done', (stroke) => {
-    state.strokes.push(stroke);
-    socket.broadcast.emit('stroke-done', stroke);
+    const saved = { ...stroke, socketId: socket.id };
+    state.strokes.push(saved);
+    socket.broadcast.emit('stroke-done', saved);
+  });
+
+  // 3b. Remove specific strokes by ID (own-lines-only erase)
+  socket.on('stroke-remove', ({ ids }) => {
+    ids.forEach(id => {
+      const idx = state.strokes.findIndex(s => s.id === id);
+      if (idx !== -1) state.strokes.splice(idx, 1);
+    });
+    io.emit('stroke-remove', { ids });
   });
 
   // 4. Token added
