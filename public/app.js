@@ -41,6 +41,7 @@ let strokeSeq    = 0;    // local stroke ID counter
 let arrowSeq     = 0;    // local arrow ID counter
 let ownEraseOnly = false; // only erase own lines when checked
 let arrowDashed  = false; // dashed arrows
+let isReplaying  = false; // true while a server replay is running
 
 // Throttle timestamps
 let _lastCursorEmit = 0;
@@ -355,7 +356,7 @@ let lastMousePos = null;
 
 // ── Pointer events on liveCanvas ──────────────────────────────
 liveCanvas.addEventListener('pointerdown', e => {
-  if (activeTool === 'select') return;
+  if (activeTool === 'select' || isReplaying) return;
   isDrawing = true;
   liveCanvas.setPointerCapture(e.pointerId); // capture so pointerup fires even outside canvas
   const pos = toLogical(e.clientX, e.clientY);
@@ -795,6 +796,44 @@ function connectSocket(username) {
     // Re-announce ourselves so we appear in the user list again
     socket.emit('join', { username: myName });
   });
+
+  // ── Recording / Replay socket events ────────────────────────────
+  socket.on('recording-started', () => {
+    _recActive = true;
+    const recBtn = document.getElementById('record-btn');
+    recBtn.textContent = '⏹ Stop Rec';
+    recBtn.classList.add('recording');
+    document.getElementById('replay-btn').disabled = true;
+    toast('🔴 Recording started');
+  });
+
+  socket.on('recording-ready', ({ duration, eventCount }) => {
+    _recActive = false;
+    _replayDuration = duration;
+    const recBtn = document.getElementById('record-btn');
+    recBtn.textContent = '⏺ Record';
+    recBtn.classList.remove('recording');
+    document.getElementById('replay-btn').disabled = false;
+    const secs = (duration / 1000).toFixed(1);
+    toast(`✅ Recording ready — ${secs}s · ${eventCount} events`);
+  });
+
+  socket.on('replay-init',    applyBoardSnapshot);
+  socket.on('replay-restore', applyBoardSnapshot);
+
+  socket.on('replay-started', ({ duration }) => {
+    isReplaying     = true;
+    _replayDuration = duration;
+    _replayStartMs  = Date.now();
+    liveCanvas.style.pointerEvents = 'none';
+    document.getElementById('replay-bar').classList.remove('hidden');
+    document.getElementById('replay-btn').disabled = true;
+    tickReplayBar();
+    toast('▶ Replaying for everyone…');
+  });
+
+  socket.on('replay-done',    endReplay);
+  socket.on('replay-stopped', endReplay);
 }
 
 // ── User list ─────────────────────────────────────────────────
@@ -931,12 +970,11 @@ window.addEventListener('keydown', e => {
   if (e.key === 's' || e.key === 'S') setTool('select');
 });
 
-// ── Recording ────────────────────────────────────────────────
-let _recorder      = null;
-let _recordChunks  = [];
-let _recordRafId   = null;
-let _recordStartMs = 0;
-const RECORD_MAX_MS = 30000;
+// ── Recording / Replay ───────────────────────────────────────
+let _recActive      = false;  // true while server-side recording is active
+let _replayDuration = 0;      // ms duration of the last recording
+let _replayStartMs  = 0;
+let _replayRafId    = null;
 
 function drawCompositeFrame(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
@@ -980,69 +1018,54 @@ function drawTokenFrame(ctx, t, w, h) {
   ctx.restore();
 }
 
-function startRecording() {
-  const recBtn = document.getElementById('record-btn');
-  const w = pitchCanvas.width;
-  const h = pitchCanvas.height;
-
-  const composite = document.createElement('canvas');
-  composite.width  = w;
-  composite.height = h;
-  const ctx = composite.getContext('2d');
-
-  const stream   = composite.captureStream(30);
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-
-  _recorder     = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-  _recordChunks = [];
-
-  _recorder.ondataavailable = e => { if (e.data.size > 0) _recordChunks.push(e.data); };
-  _recorder.onstop = () => {
-    const blob = new Blob(_recordChunks, { type: _recorder.mimeType });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'tac-board-recording.webm'; a.click();
-    URL.revokeObjectURL(url);
-    _recordChunks = [];
-    recBtn.textContent = '⏺ Record';
-    recBtn.classList.remove('recording');
-    cancelAnimationFrame(_recordRafId);
-    toast('✅ Recording saved!');
-  };
-
-  _recorder.start(100);
-  _recordStartMs = Date.now();
-  recBtn.textContent = '⏹ Stop (0s)';
-  recBtn.classList.add('recording');
-  toast('🔴 Recording started — max 30s');
-
-  const tick = () => {
-    const elapsed = Date.now() - _recordStartMs;
-    recBtn.textContent = `⏹ Stop (${Math.floor(elapsed / 1000)}s)`;
-    if (composite.width !== pitchCanvas.width || composite.height !== pitchCanvas.height) {
-      composite.width  = pitchCanvas.width;
-      composite.height = pitchCanvas.height;
-    }
-    drawCompositeFrame(ctx, composite.width, composite.height);
-    if (elapsed >= RECORD_MAX_MS) { stopRecording(); return; }
-    _recordRafId = requestAnimationFrame(tick);
-  };
-  _recordRafId = requestAnimationFrame(tick);
+function applyBoardSnapshot({ strokes, arrows, tokens: tokenList }) {
+  allStrokes.length = 0; allArrows.length = 0;
+  strokes.forEach(s => allStrokes.push(s));
+  arrows.forEach(a  => allArrows.push(a));
+  redrawStrokes();
+  tokenLayer.innerHTML = '';
+  Object.keys(tokens).forEach(k => delete tokens[k]);
+  tokenList.forEach(t => { tokens[t.id] = t; tokenLayer.appendChild(createTokenEl(t)); });
 }
 
-function stopRecording() {
-  cancelAnimationFrame(_recordRafId);
-  if (_recorder && _recorder.state !== 'inactive') _recorder.stop();
+function endReplay() {
+  isReplaying = false;
+  liveCanvas.style.pointerEvents = '';
+  cancelAnimationFrame(_replayRafId);
+  document.getElementById('replay-bar').classList.add('hidden');
+  document.getElementById('replay-progress').style.width = '0%';
+  document.getElementById('replay-time').textContent    = '';
+  document.getElementById('replay-btn').disabled = false;
+  toast('⏹ Replay ended — board restored');
+}
+
+function tickReplayBar() {
+  if (!isReplaying) return;
+  const elapsed = Date.now() - _replayStartMs;
+  const pct = _replayDuration > 0 ? Math.min(100, (elapsed / _replayDuration) * 100) : 0;
+  document.getElementById('replay-progress').style.width = pct + '%';
+  const remaining = Math.max(0, (_replayDuration - elapsed) / 1000);
+  document.getElementById('replay-time').textContent = remaining.toFixed(1) + 's';
+  _replayRafId = requestAnimationFrame(tickReplayBar);
 }
 
 document.getElementById('record-btn').addEventListener('click', () => {
-  if (_recorder && _recorder.state === 'recording') {
-    stopRecording();
+  if (isReplaying) return;
+  if (_recActive) {
+    socket?.emit('recording-stop');
   } else {
-    startRecording();
+    socket?.emit('recording-start');
   }
+});
+
+document.getElementById('replay-btn').addEventListener('click', () => {
+  if (isReplaying || _recActive || !socket) return;
+  socket.emit('replay-start');
+});
+
+document.getElementById('replay-stop-btn').addEventListener('click', () => {
+  if (!isReplaying || !socket) return;
+  socket.emit('replay-stop');
 });
 
 // ── Screenshot ───────────────────────────────────────────────

@@ -22,6 +22,41 @@ const state = {
 let nextTokenId = 1;
 let nextArrowId  = 1;
 
+// ── Recording / Replay ───────────────────────────────────────
+let rec = { active: false, start: 0, snapshot: null, timeline: [] };
+let rep = { active: false, timers: [], preSnap: null };
+
+function recordEvent(event, data) {
+  if (!rec.active) return;
+  rec.timeline.push({ t: Date.now() - rec.start, event, data });
+}
+
+function snapState() {
+  return {
+    strokes: JSON.parse(JSON.stringify(state.strokes)),
+    arrows:  JSON.parse(JSON.stringify(state.arrows)),
+    tokens:  JSON.parse(JSON.stringify(state.tokens))
+  };
+}
+
+function finishReplay() {
+  rep.timers.forEach(clearTimeout);
+  rep.timers = [];
+  rep.active = false;
+  const s = rep.preSnap;
+  state.strokes = s.strokes;
+  state.arrows  = s.arrows;
+  state.tokens  = s.tokens;
+  io.emit('clear-board');
+  io.emit('tokens-cleared');
+  io.emit('replay-restore', {
+    strokes: s.strokes,
+    arrows:  s.arrows,
+    tokens:  Object.values(s.tokens)
+  });
+  io.emit('replay-done');
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 const USER_COLORS = [
   '#e74c3c','#3498db','#2ecc71','#f39c12',
@@ -77,6 +112,7 @@ io.on('connection', (socket) => {
     const saved = { ...stroke, socketId: socket.id };
     state.strokes.push(saved);
     socket.broadcast.emit('stroke-done', saved);
+    recordEvent('stroke-done', saved);
   });
 
   // 3b. Remove specific strokes by ID (own-lines-only erase)
@@ -86,6 +122,7 @@ io.on('connection', (socket) => {
       if (idx !== -1) state.strokes.splice(idx, 1);
     });
     io.emit('stroke-remove', { ids });
+    recordEvent('stroke-remove', { ids });
   });
 
   // 4. Token added
@@ -94,6 +131,7 @@ io.on('connection', (socket) => {
     const newToken = { ...token, id };
     state.tokens[id] = newToken;
     io.emit('token-add', newToken);
+    recordEvent('token-add', newToken);
   });
 
   // 5. Token moved
@@ -102,6 +140,7 @@ io.on('connection', (socket) => {
       state.tokens[id].x = x;
       state.tokens[id].y = y;
       socket.broadcast.emit('token-move', { id, x, y });
+      recordEvent('token-move', { id, x, y });
     }
   });
 
@@ -109,12 +148,14 @@ io.on('connection', (socket) => {
   socket.on('token-remove', ({ id }) => {
     delete state.tokens[id];
     io.emit('token-remove', { id });
+    recordEvent('token-remove', { id });
   });
 
   // 6b. Token label edit
   socket.on('token-relabel', ({ id, label }) => {
     if (state.tokens[id]) state.tokens[id].label = label;
     io.emit('token-relabel', { id, label });
+    recordEvent('token-relabel', { id, label });
   });
 
   // 7. Arrow added
@@ -124,6 +165,7 @@ io.on('connection', (socket) => {
     // Broadcast to others, and send confirmed id back to sender separately
     socket.broadcast.emit('arrow-done', saved);
     socket.emit('arrow-confirmed', { tempId: arrow.id, arrow: saved });
+    recordEvent('arrow-done', saved);
   });
 
   // 7b. Arrow removed (undo)
@@ -133,6 +175,7 @@ io.on('connection', (socket) => {
       if (idx !== -1) state.arrows.splice(idx, 1);
     });
     io.emit('arrow-remove', { ids });
+    recordEvent('arrow-remove', { ids });
   });
 
   // 8. Clear board
@@ -142,6 +185,8 @@ io.on('connection', (socket) => {
     state.tokens = {}; // also wipe tokens so late joiners don't see ghosts
     io.emit('clear-board');
     io.emit('tokens-cleared'); // tell clients to remove all token DOM elements
+    recordEvent('clear-board', {});
+    recordEvent('tokens-cleared', {});
   });
 
   // 9. Clear drawings only
@@ -149,6 +194,7 @@ io.on('connection', (socket) => {
     state.strokes = [];
     state.arrows = [];
     io.emit('clear-board');
+    recordEvent('clear-board', {});
   });
 
   // 10. Cursor movement
@@ -159,6 +205,65 @@ io.on('connection', (socket) => {
       color: state.users[socket.id]?.color || '#fff',
       x, y
     });
+  });
+
+  // 10b. Recording controls
+  socket.on('recording-start', () => {
+    if (rec.active || rep.active) return;
+    rec.active   = true;
+    rec.start    = Date.now();
+    rec.timeline = [];
+    rec.snapshot = snapState();
+    io.emit('recording-started');
+  });
+
+  socket.on('recording-stop', () => {
+    if (!rec.active) return;
+    rec.active = false;
+    const duration = rec.timeline.length
+      ? rec.timeline[rec.timeline.length - 1].t
+      : 0;
+    io.emit('recording-ready', { duration, eventCount: rec.timeline.length });
+  });
+
+  // 10c. Replay controls
+  socket.on('replay-start', () => {
+    if (rep.active || !rec.snapshot) return;
+    rep.active  = true;
+    rep.preSnap = snapState();
+
+    // Temporarily set server state to recording snapshot so late-joiners see it
+    state.strokes = JSON.parse(JSON.stringify(rec.snapshot.strokes));
+    state.arrows  = JSON.parse(JSON.stringify(rec.snapshot.arrows));
+    state.tokens  = JSON.parse(JSON.stringify(rec.snapshot.tokens));
+
+    const duration = rec.timeline.length
+      ? rec.timeline[rec.timeline.length - 1].t
+      : 0;
+
+    io.emit('clear-board');
+    io.emit('tokens-cleared');
+    io.emit('replay-started', { duration });
+    // Small delay so clients clear before snapshot arrives
+    setTimeout(() => {
+      io.emit('replay-init', {
+        strokes: rec.snapshot.strokes,
+        arrows:  rec.snapshot.arrows,
+        tokens:  Object.values(rec.snapshot.tokens)
+      });
+    }, 150);
+
+    rep.timers = [];
+    rec.timeline.forEach(entry => {
+      const tid = setTimeout(() => io.emit(entry.event, entry.data), entry.t + 350);
+      rep.timers.push(tid);
+    });
+    const endTid = setTimeout(finishReplay, duration + 900);
+    rep.timers.push(endTid);
+  });
+
+  socket.on('replay-stop', () => {
+    if (rep.active) finishReplay();
   });
 
   // 11. Disconnect

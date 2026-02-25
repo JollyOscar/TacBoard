@@ -75,12 +75,22 @@
         <button id="clear-drawings-btn" class="action-btn" title="Clear drawings">🗑️ Clear Lines</button>
         <button id="clear-board-btn"    class="action-btn danger" title="Clear everything">💥 Clear All</button>
         <button id="screenshot-btn"     class="action-btn" title="Download board as PNG">📸 Screenshot</button>
-        <button id="record-btn"         class="action-btn" title="Record board animation (up to 30s)">⏺ Record</button>
+        <button id="record-btn"         class="action-btn" title="Record actions on the board for playback">⏺ Record</button>
+        <button id="replay-btn"          class="action-btn" disabled title="Replay the last recording on the board for everyone">▶ Replay</button>
       </div>
     </aside>
 
     <!-- Board area -->
     <main id="board-wrap">
+
+      <!-- Replay overlay bar -->
+      <div id="replay-bar" class="hidden">
+        <span id="replay-label">▶ Replay</span>
+        <div id="replay-progress-wrap"><div id="replay-progress"></div></div>
+        <span id="replay-time"></span>
+        <button id="replay-stop-btn">⏹ Stop</button>
+      </div>
+
       <!-- Canvas stack -->
       <div id="canvas-stack">
         <canvas id="pitch-canvas"></canvas>
