@@ -1142,6 +1142,15 @@ let _replayDuration = 0;      // ms duration of the last recording
 let _replayStartMs  = 0;
 let _replayRafId    = null;
 
+// Video recording (MP4 capture during replay)
+let _videoRecorder     = null;
+let _videoChunks       = [];
+let _capturedVideoBlob = null;
+let _capturingForRecId = null;
+let _isCapturingVideo  = false;
+let _captureCanvas     = null;
+let _captureStream     = null;
+
 function drawCompositeFrame(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(pitchCanvas,   0, 0, w, h);
@@ -1210,18 +1219,25 @@ function endReplay() {
 
 // ── Video Capture (MP4 Recording) ────────────────────────────────────────
 function startVideoCapture(recId) {
-  if (!canvasStack) return;
-  
   try {
-    // Create a MediaRecorder to capture the canvas stack
-    const stream = liveCanvas.captureStream(30); // 30 fps
-    _videoRecorder = new MediaRecorder(stream, {
-      mimeType: 'video/webm;codecs=vp9',
+    // Create an offscreen canvas to composite all layers
+    if (!_captureCanvas) {
+      _captureCanvas = document.createElement('canvas');
+      _captureCanvas.width = liveCanvas.width;
+      _captureCanvas.height = liveCanvas.height;
+    }
+    
+    // Capture at 30fps - draw composite on each frame
+    _captureStream = _captureCanvas.captureStream(30);
+    
+    _videoRecorder = new MediaRecorder(_captureStream, {
+      mimeType: 'video/webm',
       videoBitsPerSecond: 2500000
     });
     
     _videoChunks = [];
     _capturingForRecId = recId;
+    _isCapturingVideo = true;
     
     _videoRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
@@ -1232,59 +1248,130 @@ function startVideoCapture(recId) {
     _videoRecorder.onstop = () => {
       _capturedVideoBlob = new Blob(_videoChunks, { type: 'video/webm' });
       _videoChunks = [];
+      _isCapturingVideo = false;
     };
     
     _videoRecorder.start();
+    
+    // Start animation loop to draw composite frames
+    captureFrame();
+    
     console.log(`[+] Video capture started for recording ${recId}`);
   } catch (err) {
     console.error('[!] Video capture failed:', err);
     toast('⚠️ Video capture not supported in this browser');
+    _isCapturingVideo = false;
   }
 }
 
+function captureFrame() {
+  if (!_isCapturingVideo || !_captureCanvas) return;
+  
+  const ctx = _captureCanvas.getContext('2d');
+  const w = _captureCanvas.width;
+  const h = _captureCanvas.height;
+  
+  // Draw all canvas layers onto the capture canvas
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(pitchCanvas, 0, 0, w, h);
+  ctx.drawImage(strokesCanvas, 0, 0, w, h);
+  ctx.drawImage(liveCanvas, 0, 0, w, h);
+  
+  // Draw tokens (they're DOM elements, need to draw them manually)
+  Object.values(tokens).forEach(token => {
+    const el = document.getElementById('token-' + token.id);
+    if (!el) return;
+    
+    const logicalX = token.x;
+    const logicalY = token.y;
+    const x = (logicalX / PITCH_W) * w;
+    const y = (logicalY / PITCH_H) * h;
+    const radius = 18;
+    
+    // Draw token circle
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = token.color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Draw token label
+    ctx.fillStyle = token.color === '#ffffff' ? '#333' : '#fff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(token.label, x, y);
+    ctx.restore();
+  });
+  
+  // Continue capturing
+  requestAnimationFrame(captureFrame);
+}
+
 function stopVideoCapture() {
+  _isCapturingVideo = false;
   if (_videoRecorder && _videoRecorder.state !== 'inactive') {
     _videoRecorder.stop();
     console.log('[+] Video capture stopped');
   }
+  if (_captureStream) {
+    _captureStream.getTracks().forEach(track => track.stop());
+    _captureStream = null;
+  }
 }
 
 function downloadRecordingAsMP4(recId) {
-  // Check if we need to capture first
+  // Check if we already have a captured video for this recording
   if (_capturedVideoBlob && _capturingForRecId === recId) {
     // Already captured, download immediately
     downloadVideoBlob(recId);
-  } else {
-    // Need to replay and capture
-    toast('📽️ Replaying to capture video... Please wait');
-    _capturingForRecId = recId;
-    _selectedRecId = recId;
-    updateReplayButton();
-    
-    // Start capture when replay begins
-    const originalHandler = socket.listeners('replay-started')[0];
-    socket.once('replay-started', (data) => {
-      originalHandler(data);
-      startVideoCapture(recId);
-    });
-    
-    // Download when replay ends
-    const downloadAfterReplay = () => {
+    return;
+  }
+  
+  // Need to replay and capture
+  if (_recActive || isReplaying) {
+    toast('⚠️ Wait for current recording or replay to finish');
+    return;
+  }
+  
+  toast('📽️ Starting replay to capture video...');
+  
+  // Reset any previous capture
+  _capturedVideoBlob = null;
+  _capturingForRecId = recId;
+  _selectedRecId = recId;
+  updateReplayButton();
+  
+  // Start capture when replay begins
+  socket.once('replay-started', (data) => {
+    startVideoCapture(recId);
+  });
+  
+  // Download when replay ends
+  socket.once('replay-done', () => {
+    setTimeout(() => {
+      stopVideoCapture();
+      // Give recorder time to finalize
       setTimeout(() => {
         downloadVideoBlob(recId);
-      }, 500); // Small delay to ensure recording is fully stopped
-    };
-    
-    socket.once('replay-done', () => {
-      downloadAfterReplay();
-    });
-    socket.once('replay-stopped', () => {
-      downloadAfterReplay();
-    });
-    
-    // Trigger replay
-    socket.emit('replay-start', { recId });
-  }
+      }, 300);
+    }, 200);
+  });
+  
+  socket.once('replay-stopped', () => {
+    setTimeout(() => {
+      stopVideoCapture();
+      setTimeout(() => {
+        downloadVideoBlob(recId);
+      }, 300);
+    }, 200);
+  });
+  
+  // Trigger the replay
+  socket.emit('replay-start', { recId });
 }
 
 function downloadVideoBlob(recId) {
