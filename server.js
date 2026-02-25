@@ -135,6 +135,11 @@ io.on('connection', (socket) => {
 
   // 1. New user joins
   socket.on('join', ({ username }) => {
+    // Clean up any existing user with this socket (reconnect scenario)
+    if (state.users[socket.id]) {
+      delete state.users[socket.id];
+    }
+    
     const color = getNextColor();
     state.users[socket.id] = { id: socket.id, username, color };
 
@@ -147,9 +152,9 @@ io.on('connection', (socket) => {
       you: state.users[socket.id]
     });
 
-    // Announce join to others
+    // Announce join to others and send them updated user list
     socket.broadcast.emit('user-joined', state.users[socket.id]);
-    broadcastUserList();
+    socket.broadcast.emit('user-list', Object.values(state.users));
     console.log(`  username: ${username}`);
   });
 
@@ -399,10 +404,17 @@ io.on('connection', (socket) => {
   // 11. Disconnect
   socket.on('disconnect', () => {
     console.log(`[-] disconnected: ${socket.id}`);
-    socket.broadcast.emit('cursor-remove', { socketId: socket.id });
-    socket.broadcast.emit('user-left', state.users[socket.id]);
+    const departedUser = state.users[socket.id];
+    
+    // Remove user first
     delete state.users[socket.id];
-    broadcastUserList();
+    
+    // Then notify others
+    socket.broadcast.emit('cursor-remove', { socketId: socket.id });
+    if (departedUser) {
+      socket.broadcast.emit('user-left', departedUser);
+    }
+    socket.broadcast.emit('user-list', Object.values(state.users));
   });
 });
 

@@ -649,6 +649,12 @@ function removeCursor(socketId) {
 
 // ── Socket.io ─────────────────────────────────────────────────
 function connectSocket(username) {
+  // Disconnect existing socket if any (prevents duplicate connections)
+  if (socket && socket.connected) {
+    socket.removeAllListeners();
+    socket.disconnect();
+  }
+  
   socket = io();
 
   socket.on('connect', () => {
@@ -794,10 +800,16 @@ function connectSocket(username) {
   });
   socket.on('cursor-remove', ({ socketId }) => removeCursor(socketId));
 
-  socket.on('disconnect', () => toast('Disconnected. Reconnecting…'));
+  socket.on('disconnect', () => {
+    toast('Disconnected. Reconnecting…');
+  });
+  
   // Socket.io v4: reconnect fires on the manager
   socket.io.on('reconnect', () => {
     toast('Reconnected!');
+    // Clear any stale state from disconnect
+    Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
+    redrawLive();
     // Re-announce ourselves so we appear in the user list again
     socket.emit('join', { username: myName });
   });
