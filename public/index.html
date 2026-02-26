@@ -24,33 +24,34 @@
 
     <!-- Sidebar toolbar -->
     <aside id="toolbar">
-      <div class="tool-group">
+      <div class="tool-group tools-grid">
         <button class="tool-btn active" id="tool-draw"    title="Draw (D)">✏️</button>
         <button class="tool-btn"        id="tool-arrow"   title="Arrow (A)">➡️</button>
-        <label class="own-erase-label" title="Dashed arrows">
-          <input type="checkbox" id="arrow-dashed-check" />
-          <span>Dashed<br>arrows</span>
-        </label>
         <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
         <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
         <button class="tool-btn"        id="tool-undo"    title="Undo your last action (Ctrl+Z)">↩️</button>
+        <label class="own-erase-label" title="Dashed arrows">
+          <input type="checkbox" id="arrow-dashed-check" />
+          <span>Dashed arrows</span>
+        </label>
       </div>
 
-      <div class="tool-group">
+      <div class="tool-group color-section">
         <label class="tool-label">Color</label>
-        <input type="color" id="color-picker" value="#ffffff" title="Pen color" />
-        <div id="color-presets" class="color-presets">
-          <button class="color-preset" data-color="#e74c3c" style="background:#e74c3c" title="Red"></button>
-          <button class="color-preset" data-color="#3498db" style="background:#3498db" title="Blue"></button>
-          <button class="color-preset" data-color="#f39c12" style="background:#f39c12" title="Yellow"></button>
+        <div class="color-grid">
+          <input type="color" id="color-picker" value="#ffffff" title="Pen color" />
+          <div id="color-presets" class="color-presets">
+            <button class="color-preset" data-color="#e74c3c" style="background:#e74c3c" title="Red"></button>
+            <button class="color-preset" data-color="#3498db" style="background:#3498db" title="Blue"></button>
+            <button class="color-preset" data-color="#f39c12" style="background:#f39c12" title="Yellow"></button>
+          </div>
         </div>
         <div id="recent-colors" class="color-presets"></div>
       </div>
 
-      <div class="tool-group">
-        <label class="tool-label">Size</label>
+      <div class="tool-group size-section">
+        <label class="tool-label">Size <span id="size-val" class="size-value">3</span></label>
         <input type="range" id="size-picker" min="1" max="20" value="3" title="Pen size" />
-        <span id="size-val">3</span>
       </div>
 
       <div class="tool-divider"></div>
