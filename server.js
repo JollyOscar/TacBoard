@@ -137,13 +137,7 @@ async function saveRecordings() {
   // Always save to file as backup
   try {
     const data = JSON.stringify({
-      recordings: recordings.map(r => ({
-        id: r.id,
-        name: r.name,
-        timestamp: r.timestamp,
-        duration: r.duration,
-        eventCount: r.eventCount
-      })),
+      recordings: recordings,  // Save full recordings with snapshot and timeline
       nextId: nextRecId
     }, null, 2);
     fs.writeFileSync(RECORDINGS_FILE, data, 'utf8');
@@ -255,11 +249,7 @@ async function savePresets() {
   // Always save to file as backup
   try {
     const data = JSON.stringify({
-      presets: boardPresets.map(p => ({
-        id: p.id,
-        name: p.name,
-        timestamp: p.timestamp
-      })),
+      presets: boardPresets,  // Save full presets with strokes, arrows, tokens
       nextId: nextPresetId
     }, null, 2);
     fs.writeFileSync(PRESETS_FILE, data, 'utf8');
@@ -437,6 +427,7 @@ io.on('connection', (socket) => {
   socket.on('stroke-done', (stroke) => {
     const saved = { ...stroke, socketId: socket.id };
     state.strokes.push(saved);
+    console.log(`[*] Stroke added. Total strokes in state: ${state.strokes.length}`);
     socket.broadcast.emit('stroke-done', saved);
     recordEvent('stroke-done', saved);
   });
@@ -506,6 +497,7 @@ io.on('connection', (socket) => {
 
   // 8. Clear board
   socket.on('clear-board', () => {
+    console.log(`[*] Board cleared. Previous state: ${state.strokes.length} strokes, ${state.arrows.length} arrows, ${Object.keys(state.tokens).length} tokens`);
     state.strokes = [];
     state.arrows = [];
     state.tokens = {}; // also wipe tokens so late joiners don't see ghosts
@@ -517,6 +509,7 @@ io.on('connection', (socket) => {
 
   // 9. Clear drawings only
   socket.on('clear-drawings', () => {
+    console.log(`[*] Drawings cleared. Previous state: ${state.strokes.length} strokes, ${state.arrows.length} arrows`);
     state.strokes = [];
     state.arrows = [];
     io.emit('clear-board');
@@ -635,6 +628,10 @@ io.on('connection', (socket) => {
       arrows: JSON.parse(JSON.stringify(state.arrows)),
       tokens: JSON.parse(JSON.stringify(state.tokens))
     };
+    
+    // Log what we're saving
+    console.log(`[*] Saving preset "${preset.name}": ${preset.strokes.length} strokes, ${preset.arrows.length} arrows, ${Object.keys(preset.tokens).length} tokens`);
+    
     boardPresets.push(preset);
     addPresetToDB(preset).then(() => savePresets()); // Persist to database and file
     io.emit('presets-list', getBoardPresetsList());
@@ -644,6 +641,7 @@ io.on('connection', (socket) => {
   socket.on('load-preset', ({ presetId }) => {
     const preset = boardPresets.find(p => p.id === presetId);
     if (!preset) return;
+    console.log(`[*] Loading preset "${preset.name}": ${preset.strokes.length} strokes, ${preset.arrows.length} arrows, ${Object.keys(preset.tokens).length} tokens`);
     state.strokes = JSON.parse(JSON.stringify(preset.strokes));
     state.arrows = JSON.parse(JSON.stringify(preset.arrows));
     state.tokens = JSON.parse(JSON.stringify(preset.tokens));
