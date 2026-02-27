@@ -322,7 +322,10 @@ function getBoardPresetsList() {
   return boardPresets.map(p => ({
     id: p.id,
     name: p.name,
-    timestamp: p.timestamp
+    timestamp: p.timestamp,
+    strokeCount: (p.strokes || []).length,
+    arrowCount: (p.arrows || []).length,
+    tokenCount: Object.keys(p.tokens || {}).length
   }));
 }
 

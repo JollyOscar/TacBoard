@@ -977,10 +977,15 @@ function renderPresetsList() {
     const li = document.createElement('li');
     li.className = 'preset-item';
     const time = new Date(preset.timestamp).toLocaleString();
+    const parts = [];
+    if (preset.strokeCount) parts.push(`${preset.strokeCount} stroke${preset.strokeCount !== 1 ? 's' : ''}`);
+    if (preset.arrowCount) parts.push(`${preset.arrowCount} arrow${preset.arrowCount !== 1 ? 's' : ''}`);
+    if (preset.tokenCount) parts.push(`${preset.tokenCount} token${preset.tokenCount !== 1 ? 's' : ''}`);
+    const summary = parts.length ? parts.join(', ') : 'empty';
     li.innerHTML = `
       <div class="preset-info" data-id="${preset.id}">
         <div class="preset-name">${escHtml(preset.name)}</div>
-        <div class="preset-time">${time}</div>
+        <div class="preset-time">${time} · ${summary}</div>
       </div>
       <div class="preset-actions">
         <button class="preset-edit" data-id="${preset.id}" title="Rename">✏️</button>
