@@ -812,13 +812,9 @@ function connectSocket(username) {
   });
   
   // Socket.io v4: reconnect fires on the manager
+  // NOTE: do NOT re-emit 'join' here — the 'connect' event already does it
   socket.io.on('reconnect', () => {
     toast('Reconnected!');
-    // Clear any stale state from disconnect
-    Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
-    redrawLive();
-    // Re-announce ourselves so we appear in the user list again
-    socket.emit('join', { username: myName });
   });
 
   // ── Recording / Replay socket events ────────────────────────────

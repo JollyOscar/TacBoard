@@ -86,6 +86,7 @@ const state = {
 
 let nextTokenId = 1;
 let nextArrowId  = 1;
+const disconnectTimers = {}; // socketId → setTimeout handle for grace-period removal
 
 // ── Recording / Replay ───────────────────────────────────────
 let rec = { active: false, start: 0, snapshot: null, timeline: [] };
@@ -394,12 +395,28 @@ io.on('connection', (socket) => {
 
   // 1. New user joins
   socket.on('join', ({ username }) => {
-    // Clean up any existing user with this socket (reconnect scenario)
+    // Cancel any pending disconnect grace timer for this socket
+    if (disconnectTimers[socket.id]) {
+      clearTimeout(disconnectTimers[socket.id]);
+      delete disconnectTimers[socket.id];
+    }
+
+    // Remove any stale entry for this socket id
     if (state.users[socket.id]) {
       delete state.users[socket.id];
     }
-    
-    const color = getNextColor();
+
+    // Remove any previous connection for the same username (cross-socket reconnect)
+    const existingSocketId = Object.keys(state.users).find(
+      id => state.users[id].username === username
+    );
+    let color;
+    if (existingSocketId) {
+      color = state.users[existingSocketId].color; // keep their colour
+      delete state.users[existingSocketId];
+    } else {
+      color = getNextColor();
+    }
     state.users[socket.id] = { id: socket.id, username, color };
 
     // Send full current state to the new user
@@ -683,20 +700,23 @@ io.on('connection', (socket) => {
     socket.emit('presets-list', getBoardPresetsList());
   });
 
-  // 11. Disconnect
+  // 11. Disconnect — use a grace period so brief hiccups don't spam user-left
   socket.on('disconnect', () => {
     console.log(`[-] disconnected: ${socket.id}`);
-    const departedUser = state.users[socket.id];
-    
-    // Remove user first
-    delete state.users[socket.id];
-    
-    // Then notify others
     socket.broadcast.emit('cursor-remove', { socketId: socket.id });
-    if (departedUser) {
-      socket.broadcast.emit('user-left', departedUser);
-    }
-    socket.broadcast.emit('user-list', Object.values(state.users));
+
+    // Wait 8 seconds before removing user — if they reconnect in time the join
+    // handler cancels this timer and they keep their slot without a user-left event
+    disconnectTimers[socket.id] = setTimeout(() => {
+      delete disconnectTimers[socket.id];
+      const departedUser = state.users[socket.id];
+      if (!departedUser) return; // already cleaned up by a new join
+      delete state.users[socket.id];
+      console.log(`[-] removed user: ${departedUser.username}`);
+      io.emit('cursor-remove', { socketId: socket.id });
+      io.emit('user-left', departedUser);
+      io.emit('user-list', Object.values(state.users));
+    }, 8000);
   });
 });
 
