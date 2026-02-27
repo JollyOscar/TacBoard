@@ -459,5 +459,5 @@ loadRecordings(); // Load saved recordings from disk
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Tac Board running → http://localhost:${PORT}`);
+  console.log(`⚽ Tac Board running → http://localhost:${PORT}`);
 });
