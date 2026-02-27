@@ -24,7 +24,9 @@ let useDatabase = false;
 if (process.env.DATABASE_URL) {
   db = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: {
+      rejectUnauthorized: false  // Required for Railway PostgreSQL
+    }
   });
   useDatabase = true;
   console.log('[+] PostgreSQL database configured');
@@ -34,9 +36,14 @@ if (process.env.DATABASE_URL) {
 
 // Initialize database tables
 async function initDatabase() {
-  if (!useDatabase || !db) return;
+  if (!useDatabase || !db) {
+    console.log('[!] Skipping database initialization - no database configured');
+    return;
+  }
   
   try {
+    console.log('[*] Creating database tables...');
+    
     await db.query(`
       CREATE TABLE IF NOT EXISTS presets (
         id SERIAL PRIMARY KEY,
@@ -46,6 +53,7 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('[+] Presets table created/verified');
     
     await db.query(`
       CREATE TABLE IF NOT EXISTS recordings (
@@ -58,10 +66,12 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('[+] Recordings table created/verified');
     
-    console.log('[+] Database tables initialized');
+    console.log('[+] Database tables initialized successfully');
   } catch (err) {
-    console.error('[!] Database initialization error:', err.message);
+    console.error('[!] Database initialization error:', err);
+    console.error('[!] Full error details:', err.stack);
     useDatabase = false;
   }
 }
