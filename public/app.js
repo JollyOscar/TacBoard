@@ -995,6 +995,7 @@ function renderPresetsList() {
     el.addEventListener('click', () => {
       if (confirm('Load this preset? This will replace the current board.')) {
         socket?.emit('load-preset', { presetId: +el.dataset.id });
+        closeModal(presetsModal);
       }
     });
   });
@@ -1417,6 +1418,7 @@ function renderRecordingsList() {
         <div class="rec-meta">${dur}s · ${rec.eventCount} events</div>
       </div>
       <div class="rec-actions">
+        <button class="rec-play" data-id="${rec.id}" title="Play recording">▶</button>
         <button class="rec-download" data-id="${rec.id}" title="Download as MP4">📽️</button>
         <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
       </div>
@@ -1430,6 +1432,17 @@ function renderRecordingsList() {
       _selectedRecId = +el.dataset.id;
       renderRecordingsList();
       updateReplayButton();
+    });
+  });
+
+  // Play handlers
+  list.querySelectorAll('.rec-play').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const recId = +btn.dataset.id;
+      if (isReplaying || _recActive || !socket) return;
+      socket.emit('replay-start', { recId });
+      closeModal(recordingsModal);
     });
   });
 
