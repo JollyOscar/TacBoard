@@ -1414,11 +1414,12 @@ function renderRecordingsList() {
     const dur = (rec.duration / 1000).toFixed(1);
     li.innerHTML = `
       <div class="rec-info" data-id="${rec.id}">
-        <div class="rec-time">${time}</div>
-        <div class="rec-meta">${dur}s · ${rec.eventCount} events</div>
+        <div class="rec-time">${escHtml(rec.name)}</div>
+        <div class="rec-meta">${time} · ${dur}s · ${rec.eventCount} events</div>
       </div>
       <div class="rec-actions">
         <button class="rec-play" data-id="${rec.id}" title="Play recording">▶</button>
+        <button class="rec-rename" data-id="${rec.id}" title="Rename">✏️</button>
         <button class="rec-download" data-id="${rec.id}" title="Download as MP4">📽️</button>
         <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
       </div>
@@ -1443,6 +1444,19 @@ function renderRecordingsList() {
       if (isReplaying || _recActive || !socket) return;
       socket.emit('replay-start', { recId });
       closeModal(recordingsModal);
+    });
+  });
+
+  // Rename handlers
+  list.querySelectorAll('.rec-rename').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const recording = _recordings.find(r => r.id === +btn.dataset.id);
+      if (!recording) return;
+      const newName = prompt('Rename recording:', recording.name);
+      if (newName && newName.trim() && newName !== recording.name) {
+        socket?.emit('rename-recording', { recId: recording.id, newName: newName.trim() });
+      }
     });
   });
 

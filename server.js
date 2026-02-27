@@ -177,6 +177,25 @@ async function addRecordingToDB(recording) {
   }
 }
 
+// Update recording in database
+async function updateRecordingInDB(recording) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    await db.query(
+      'UPDATE recordings SET name = $1, timestamp = $2 WHERE id = $3',
+      [
+        recording.name,
+        recording.timestamp,
+        recording.id
+      ]
+    );
+    console.log(`[+] Recording ${recording.id} updated in database`);
+  } catch (err) {
+    console.error('[!] Error updating recording in database:', err.message);
+  }
+}
+
 // Delete recording from database
 async function deleteRecordingFromDB(recId) {
   if (!useDatabase || !db) return;
@@ -586,6 +605,15 @@ io.on('connection', (socket) => {
 
   socket.on('get-recordings', () => {
     socket.emit('recordings-list', getRecordingsList());
+  });
+
+  socket.on('rename-recording', ({ recId, newName }) => {
+    const recording = recordings.find(r => r.id === recId);
+    if (recording) {
+      recording.name = newName;
+      updateRecordingInDB(recording).then(() => saveRecordings()); // Update database and file
+      io.emit('recordings-list', getRecordingsList());
+    }
   });
 
   socket.on('delete-recording', ({ recId }) => {
