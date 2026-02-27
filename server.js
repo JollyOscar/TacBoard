@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const { Pool } = require('pg');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +16,55 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Database setup ────────────────────────────────────────────
+let db = null;
+let useDatabase = false;
+
+if (process.env.DATABASE_URL) {
+  db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  useDatabase = true;
+  console.log('[+] PostgreSQL database configured');
+} else {
+  console.log('[!] No DATABASE_URL found, using file persistence');
+}
+
+// Initialize database tables
+async function initDatabase() {
+  if (!useDatabase || !db) return;
+  
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS presets (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        timestamp BIGINT NOT NULL,
+        data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS recordings (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        timestamp BIGINT NOT NULL,
+        duration INTEGER NOT NULL,
+        event_count INTEGER NOT NULL,
+        data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    console.log('[+] Database tables initialized');
+  } catch (err) {
+    console.error('[!] Database initialization error:', err.message);
+    useDatabase = false;
+  }
+}
 
 // ── Shared state ──────────────────────────────────────────────
 const state = {
@@ -34,8 +84,31 @@ const RECORDINGS_FILE = path.join(__dirname, 'board-recordings.json');
 let recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
 let nextRecId = 1;
 
-// Load recordings from file
-function loadRecordings() {
+// Load recordings from database or file
+async function loadRecordings() {
+  if (useDatabase && db) {
+    try {
+      const result = await db.query('SELECT * FROM recordings ORDER BY id ASC');
+      recordings = result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        timestamp: parseInt(row.timestamp),
+        duration: row.duration,
+        eventCount: row.event_count,
+        snapshot: row.data.snapshot,
+        timeline: row.data.timeline
+      }));
+      if (recordings.length > 0) {
+        nextRecId = Math.max(...recordings.map(r => r.id)) + 1;
+      }
+      console.log(`[+] Loaded ${recordings.length} recordings from database`);
+      return;
+    } catch (err) {
+      console.error('[!] Error loading recordings from database:', err.message);
+    }
+  }
+  
+  // Fallback to file
   try {
     if (fs.existsSync(RECORDINGS_FILE)) {
       const data = fs.readFileSync(RECORDINGS_FILE, 'utf8');
@@ -45,20 +118,64 @@ function loadRecordings() {
       console.log(`[+] Loaded ${recordings.length} recordings from file`);
     }
   } catch (err) {
-    console.error('[!] Error loading recordings:', err.message);
+    console.error('[!] Error loading recordings from file:', err.message);
   }
 }
 
-// Save recordings to file
-function saveRecordings() {
+// Save recordings to database or file
+async function saveRecordings() {
+  // Always save to file as backup
   try {
     const data = JSON.stringify({
-      recordings: recordings,
+      recordings: recordings.map(r => ({
+        id: r.id,
+        name: r.name,
+        timestamp: r.timestamp,
+        duration: r.duration,
+        eventCount: r.eventCount
+      })),
       nextId: nextRecId
     }, null, 2);
     fs.writeFileSync(RECORDINGS_FILE, data, 'utf8');
   } catch (err) {
-    console.error('[!] Error saving recordings:', err.message);
+    console.error('[!] Error saving recordings to file:', err.message);
+  }
+}
+
+// Add recording to database
+async function addRecordingToDB(recording) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    const result = await db.query(
+      'INSERT INTO recordings (id, name, timestamp, duration, event_count, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [
+        recording.id,
+        recording.name,
+        recording.timestamp,
+        recording.duration,
+        recording.eventCount,
+        JSON.stringify({
+          snapshot: recording.snapshot,
+          timeline: recording.timeline
+        })
+      ]
+    );
+    console.log(`[+] Recording ${recording.id} saved to database`);
+  } catch (err) {
+    console.error('[!] Error saving recording to database:', err.message);
+  }
+}
+
+// Delete recording from database
+async function deleteRecordingFromDB(recId) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    await db.query('DELETE FROM recordings WHERE id = $1', [recId]);
+    console.log(`[+] Recording ${recId} deleted from database`);
+  } catch (err) {
+    console.error('[!] Error deleting recording from database:', err.message);
   }
 }
 
@@ -67,8 +184,30 @@ const PRESETS_FILE = path.join(__dirname, 'board-presets.json');
 let boardPresets = [];  // Array of saved board states: { id, name, timestamp, strokes, arrows, tokens }
 let nextPresetId = 1;
 
-// Load presets from file
-function loadPresets() {
+// Load presets from database or file
+async function loadPresets() {
+  if (useDatabase && db) {
+    try {
+      const result = await db.query('SELECT * FROM presets ORDER BY id ASC');
+      boardPresets = result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        timestamp: parseInt(row.timestamp),
+        strokes: row.data.strokes || [],
+        arrows: row.data.arrows || [],
+        tokens: row.data.tokens || []
+      }));
+      if (boardPresets.length > 0) {
+        nextPresetId = Math.max(...boardPresets.map(p => p.id)) + 1;
+      }
+      console.log(`[+] Loaded ${boardPresets.length} board presets from database`);
+      return;
+    } catch (err) {
+      console.error('[!] Error loading presets from database:', err.message);
+    }
+  }
+  
+  // Fallback to file
   try {
     if (fs.existsSync(PRESETS_FILE)) {
       const data = fs.readFileSync(PRESETS_FILE, 'utf8');
@@ -78,20 +217,85 @@ function loadPresets() {
       console.log(`[+] Loaded ${boardPresets.length} board presets from file`);
     }
   } catch (err) {
-    console.error('[!] Error loading presets:', err.message);
+    console.error('[!] Error loading presets from file:', err.message);
   }
 }
 
-// Save presets to file
-function savePresets() {
+// Save presets to file (backup)
+async function savePresets() {
+  // Always save to file as backup
   try {
     const data = JSON.stringify({
-      presets: boardPresets,
+      presets: boardPresets.map(p => ({
+        id: p.id,
+        name: p.name,
+        timestamp: p.timestamp
+      })),
       nextId: nextPresetId
     }, null, 2);
     fs.writeFileSync(PRESETS_FILE, data, 'utf8');
   } catch (err) {
-    console.error('[!] Error saving presets:', err.message);
+    console.error('[!] Error saving presets to file:', err.message);
+  }
+}
+
+// Add preset to database
+async function addPresetToDB(preset) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    const result = await db.query(
+      'INSERT INTO presets (id, name, timestamp, data) VALUES ($1, $2, $3, $4) RETURNING id',
+      [
+        preset.id,
+        preset.name,
+        preset.timestamp,
+        JSON.stringify({
+          strokes: preset.strokes,
+          arrows: preset.arrows,
+          tokens: preset.tokens
+        })
+      ]
+    );
+    console.log(`[+] Preset ${preset.id} saved to database`);
+  } catch (err) {
+    console.error('[!] Error saving preset to database:', err.message);
+  }
+}
+
+// Delete preset from database
+async function deletePresetFromDB(presetId) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    await db.query('DELETE FROM presets WHERE id = $1', [presetId]);
+    console.log(`[+] Preset ${presetId} deleted from database`);
+  } catch (err) {
+    console.error('[!] Error deleting preset from database:', err.message);
+  }
+}
+
+// Update preset in database
+async function updatePresetInDB(preset) {
+  if (!useDatabase || !db) return;
+  
+  try {
+    await db.query(
+      'UPDATE presets SET name = $1, timestamp = $2, data = $3 WHERE id = $4',
+      [
+        preset.name,
+        preset.timestamp,
+        JSON.stringify({
+          strokes: preset.strokes,
+          arrows: preset.arrows,
+          tokens: preset.tokens
+        }),
+        preset.id
+      ]
+    );
+    console.log(`[+] Preset ${preset.id} updated in database`);
+  } catch (err) {
+    console.error('[!] Error updating preset in database:', err.message);
   }
 }
 
@@ -326,7 +530,7 @@ io.on('connection', (socket) => {
       timeline: rec.timeline
     };
     recordings.push(savedRec);
-    saveRecordings(); // Persist to disk
+    addRecordingToDB(savedRec).then(() => saveRecordings()); // Persist to database and file
     io.emit('recording-saved', getRecordingsList());
   });
 
@@ -378,7 +582,7 @@ io.on('connection', (socket) => {
     const idx = recordings.findIndex(r => r.id === recId);
     if (idx !== -1) {
       recordings.splice(idx, 1);
-      saveRecordings(); // Persist to disk
+      deleteRecordingFromDB(recId).then(() => saveRecordings()); // Delete from database and update file
       io.emit('recordings-list', getRecordingsList());
     }
   });
@@ -394,7 +598,7 @@ io.on('connection', (socket) => {
       tokens: JSON.parse(JSON.stringify(state.tokens))
     };
     boardPresets.push(preset);
-    savePresets(); // Persist to disk
+    addPresetToDB(preset).then(() => savePresets()); // Persist to database and file
     io.emit('presets-list', getBoardPresetsList());
     socket.emit('preset-saved', { id: preset.id, name: preset.name });
   });
@@ -418,7 +622,7 @@ io.on('connection', (socket) => {
     const preset = boardPresets.find(p => p.id === presetId);
     if (preset) {
       preset.name = newName;
-      savePresets(); // Persist to disk
+      updatePresetInDB(preset).then(() => savePresets()); // Update database and file
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -427,7 +631,7 @@ io.on('connection', (socket) => {
     const idx = boardPresets.findIndex(p => p.id === presetId);
     if (idx !== -1) {
       boardPresets.splice(idx, 1);
-      savePresets(); // Persist to disk
+      deletePresetFromDB(presetId).then(() => savePresets()); // Delete from database and update file
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -454,10 +658,22 @@ io.on('connection', (socket) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────
-loadPresets(); // Load saved presets from disk
-loadRecordings(); // Load saved recordings from disk
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`⚽ Tac Board running → http://localhost:${PORT}`);
-});
+
+async function startServer() {
+  try {
+    await initDatabase();
+    await loadPresets();
+    await loadRecordings();
+    
+    server.listen(PORT, () => {
+      console.log(`⚽ Tac Board running → http://localhost:${PORT}`);
+      console.log(`📊 Database mode: ${useDatabase ? 'PostgreSQL' : 'File-based'}`);
+    });
+  } catch (err) {
+    console.error('[!] Server startup error:', err.message);
+    process.exit(1);
+  }
+}
+
+startServer();
