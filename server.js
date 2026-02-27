@@ -7,7 +7,11 @@ const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' }
+  cors: { origin: '*' },
+  pingTimeout: 60000,      // Wait 60s for ping response before disconnect
+  pingInterval: 25000,     // Send ping every 25s to keep connection alive
+  connectTimeout: 45000,   // Wait 45s for connection to establish
+  transports: ['websocket', 'polling']  // Try websocket first, fallback to polling
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -26,8 +30,37 @@ let nextArrowId  = 1;
 // ── Recording / Replay ───────────────────────────────────────
 let rec = { active: false, start: 0, snapshot: null, timeline: [] };
 let rep = { active: false, timers: [], preSnap: null, currentRecId: null };
-const recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
+const RECORDINGS_FILE = path.join(__dirname, 'board-recordings.json');
+let recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
 let nextRecId = 1;
+
+// Load recordings from file
+function loadRecordings() {
+  try {
+    if (fs.existsSync(RECORDINGS_FILE)) {
+      const data = fs.readFileSync(RECORDINGS_FILE, 'utf8');
+      const parsed = JSON.parse(data);
+      recordings = parsed.recordings || [];
+      nextRecId = parsed.nextId || 1;
+      console.log(`[+] Loaded ${recordings.length} recordings from file`);
+    }
+  } catch (err) {
+    console.error('[!] Error loading recordings:', err.message);
+  }
+}
+
+// Save recordings to file
+function saveRecordings() {
+  try {
+    const data = JSON.stringify({
+      recordings: recordings,
+      nextId: nextRecId
+    }, null, 2);
+    fs.writeFileSync(RECORDINGS_FILE, data, 'utf8');
+  } catch (err) {
+    console.error('[!] Error saving recordings:', err.message);
+  }
+}
 
 // ── Board Presets ─────────────────────────────────────────────
 const PRESETS_FILE = path.join(__dirname, 'board-presets.json');
@@ -293,6 +326,7 @@ io.on('connection', (socket) => {
       timeline: rec.timeline
     };
     recordings.push(savedRec);
+    saveRecordings(); // Persist to disk
     io.emit('recording-saved', getRecordingsList());
   });
 
@@ -344,6 +378,7 @@ io.on('connection', (socket) => {
     const idx = recordings.findIndex(r => r.id === recId);
     if (idx !== -1) {
       recordings.splice(idx, 1);
+      saveRecordings(); // Persist to disk
       io.emit('recordings-list', getRecordingsList());
     }
   });
@@ -420,6 +455,7 @@ io.on('connection', (socket) => {
 
 // ── Start ─────────────────────────────────────────────────────
 loadPresets(); // Load saved presets from disk
+loadRecordings(); // Load saved recordings from disk
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

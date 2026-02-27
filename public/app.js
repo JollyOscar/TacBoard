@@ -655,7 +655,14 @@ function connectSocket(username) {
     socket.disconnect();
   }
   
-  socket = io();
+  socket = io({
+    reconnection: true,              // Enable automatic reconnection
+    reconnectionAttempts: Infinity,   // Keep trying to reconnect
+    reconnectionDelay: 1000,          // Wait 1s before first reconnect attempt
+    reconnectionDelayMax: 5000,       // Max 5s between reconnect attempts
+    timeout: 20000,                   // Connection timeout
+    transports: ['websocket', 'polling']  // Try websocket first
+  });
 
   socket.on('connect', () => {
     myId = socket.id;
@@ -837,16 +844,12 @@ function connectSocket(username) {
     const last = recordings[recordings.length - 1];
     const secs = (last.duration / 1000).toFixed(1);
     toast(`✅ Recording saved — ${secs}s · ${last.eventCount} events`);
-    // Update collapsible height after new recording is added
-    setTimeout(() => updateCollapsibleMaxHeight('recordings'), 50);
   });
 
   socket.on('recordings-list', (recordings) => {
     _recordings = recordings;
     renderRecordingsList();
     updateReplayButton();
-    // Update collapsible height after list updates
-    setTimeout(() => updateCollapsibleMaxHeight('recordings'), 50);
   });
 
   socket.on('replay-init',    applyBoardSnapshot);
@@ -870,8 +873,6 @@ function connectSocket(username) {
   socket.on('presets-list', (presets) => {
     _boardPresets = presets;
     renderPresetsList();
-    // Update collapsible height after list updates
-    setTimeout(() => updateCollapsibleMaxHeight('presets'), 50);
   });
 
   socket.on('preset-saved', ({ id, name }) => {
@@ -1020,9 +1021,6 @@ function renderPresetsList() {
       }
     });
   });
-  
-  // Update collapsible section height
-  updateCollapsibleMaxHeight('presets');
 }
 
 document.getElementById('save-preset-btn').addEventListener('click', () => {
@@ -1451,9 +1449,6 @@ function renderRecordingsList() {
       downloadRecordingAsMP4(recId);
     });
   });
-  
-  // Update collapsible section height
-  updateCollapsibleMaxHeight('recordings');
 }
 
 function tickReplayBar() {
@@ -1510,60 +1505,41 @@ function doJoin() {
 joinBtn.addEventListener('click', doJoin);
 usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
 
-// ── Collapsible sections ──────────────────────────────────────
-function updateCollapsibleMaxHeight(sectionId) {
-  const content = document.getElementById(`${sectionId}-content`);
-  const header = document.querySelector(`.collapsible-header[data-section="${sectionId}"]`);
-  if (content && header && !header.classList.contains('collapsed')) {
-    // Calculate and set the proper max-height
-    const contentHeight = content.scrollHeight;
-    if (contentHeight > 0) {
-      content.style.maxHeight = contentHeight + 'px';
-    }
-  }
+// ── Modal / Popup handling ────────────────────────────────────
+const recordingsModal = document.getElementById('recordings-modal');
+const presetsModal = document.getElementById('presets-modal');
+const openRecordingsBtn = document.getElementById('open-recordings-btn');
+const openPresetsBtn = document.getElementById('open-presets-btn');
+const closeRecordingsBtn = document.getElementById('close-recordings-modal');
+const closePresetsBtn = document.getElementById('close-presets-modal');
+
+function openModal(modal) {
+  modal.classList.remove('hidden');
 }
 
-document.querySelectorAll('.collapsible-header').forEach(header => {
-  header.addEventListener('click', () => {
-    const section = header.dataset.section;
-    const content = document.getElementById(`${section}-content`);
-    const isCollapsed = header.classList.contains('collapsed');
-    
-    if (isCollapsed) {
-      // Expand
-      header.classList.remove('collapsed');
-      content.classList.remove('collapsed');
-      content.style.maxHeight = content.scrollHeight + 'px';
-    } else {
-      // Collapse
-      header.classList.add('collapsed');
-      content.classList.add('collapsed');
-      content.style.maxHeight = '0';
-    }
-  });
-  
-  // Set initial max-height after a delay to allow content to load
-  const section = header.dataset.section;
-  const content = document.getElementById(`${section}-content`);
-  if (content && !header.classList.contains('collapsed')) {
-    // Initial update after DOM is ready
-    setTimeout(() => updateCollapsibleMaxHeight(section), 200);
-    // Another update after socket connection establishes (for recordings/presets)
-    setTimeout(() => updateCollapsibleMaxHeight(section), 1500);
+function closeModal(modal) {
+  modal.classList.add('hidden');
+}
+
+openRecordingsBtn.addEventListener('click', () => openModal(recordingsModal));
+openPresetsBtn.addEventListener('click', () => openModal(presetsModal));
+closeRecordingsBtn.addEventListener('click', () => closeModal(recordingsModal));
+closePresetsBtn.addEventListener('click', () => closeModal(presetsModal));
+
+// Close modals when clicking outside the content
+recordingsModal.addEventListener('click', (e) => {
+  if (e.target === recordingsModal) closeModal(recordingsModal);
+});
+presetsModal.addEventListener('click', (e) => {
+  if (e.target === presetsModal) closeModal(presetsModal);
+});
+
+// Close modals with Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (!recordingsModal.classList.contains('hidden')) closeModal(recordingsModal);
+    if (!presetsModal.classList.contains('hidden')) closeModal(presetsModal);
   }
-});
-
-// Update collapsible sections when content changes
-const resizeObserver = new ResizeObserver(() => {
-  ['tokens', 'recordings', 'presets'].forEach(sectionId => {
-    updateCollapsibleMaxHeight(sectionId);
-  });
-});
-
-// Observe the collapsible content areas
-['tokens', 'recordings', 'presets'].forEach(sectionId => {
-  const content = document.getElementById(`${sectionId}-content`);
-  if (content) resizeObserver.observe(content);
 });
 
 // ── Resize handling ───────────────────────────────────────────

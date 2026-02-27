@@ -79,33 +79,16 @@
 
       <div class="tool-divider"></div>
 
-      <!-- Recordings list -->
+      <!-- Recordings button -->
       <div class="tool-group">
-        <div class="collapsible-header" data-section="recordings">
-          <span class="arrow">▼</span>
-          <label class="tool-label">Recordings</label>
-        </div>
-        <div id="recordings-content" class="collapsible-content">
-          <ul id="recordings-list" class="recordings-list">
-            <li class="no-recordings">No recordings yet</li>
-          </ul>
-        </div>
+        <button id="open-recordings-btn" class="action-btn" title="View and manage recordings">⏺ Recordings</button>
       </div>
 
       <div class="tool-divider"></div>
 
-      <!-- Board Presets -->
+      <!-- Board Presets button -->
       <div class="tool-group">
-        <div class="collapsible-header" data-section="presets">
-          <span class="arrow">▼</span>
-          <label class="tool-label">Board Presets</label>
-        </div>
-        <div id="presets-content" class="collapsible-content">
-          <button id="save-preset-btn" class="action-btn" title="Save current board state">💾 Save</button>
-          <ul id="presets-list" class="presets-list">
-            <li class="no-presets">No presets saved</li>
-          </ul>
-        </div>
+        <button id="open-presets-btn" class="action-btn" title="View and manage board presets">💾 Presets</button>
       </div>
 
       <div class="tool-divider"></div>
@@ -154,6 +137,37 @@
 
   <!-- Toast notifications -->
   <div id="toast-container"></div>
+
+  <!-- Recordings Modal -->
+  <div id="recordings-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>⏺ Recordings</h2>
+        <button class="modal-close" id="close-recordings-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <ul id="recordings-list" class="recordings-list">
+          <li class="no-recordings">No recordings yet</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Presets Modal -->
+  <div id="presets-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>💾 Board Presets</h2>
+        <button class="modal-close" id="close-presets-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <button id="save-preset-btn" class="action-btn save-preset-modal-btn" title="Save current board state">💾 Save New Preset</button>
+        <ul id="presets-list" class="presets-list">
+          <li class="no-presets">No presets saved</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
