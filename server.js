@@ -411,6 +411,10 @@ io.on('connection', (socket) => {
       you: state.users[socket.id]
     });
 
+    // Proactively push lists so client doesn't need to request them
+    socket.emit('recordings-list', getRecordingsList());
+    socket.emit('presets-list', getBoardPresetsList());
+
     // Announce join to others and send them updated user list
     socket.broadcast.emit('user-joined', state.users[socket.id]);
     socket.broadcast.emit('user-list', Object.values(state.users));
