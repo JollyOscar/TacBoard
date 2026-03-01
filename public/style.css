@@ -279,20 +279,35 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .preset-actions {
   display: flex; gap: 4px;
 }
-.preset-edit, .preset-delete {
+.preset-load, .preset-edit, .preset-delete {
   width: 22px; height: 22px; border-radius: 4px;
   border: none; color: #fff; font-size: .8rem;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   opacity: 0.7; transition: opacity .1s, transform .1s;
   flex-shrink: 0;
 }
+.preset-load { background: var(--accent); }
 .preset-edit { background: var(--accent2); }
 .preset-delete { background: var(--danger); }
-.preset-edit:hover, .preset-delete:hover { opacity: 1; transform: scale(1.1); }
+.preset-load:hover, .preset-edit:hover, .preset-delete:hover { opacity: 1; transform: scale(1.1); }
 
 .no-presets {
   padding: 12px; text-align: center; font-size: .75rem;
   color: var(--text-muted); font-style: italic;
+}
+
+/* Inline rename input (presets + recordings) */
+.inline-rename-input {
+  background: var(--bg);
+  border: 1px solid var(--accent2);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+  min-width: 0;
 }
 
 /* Action buttons */
@@ -444,6 +459,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 #user-list li:last-child { border-bottom: none; }
 .user-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+
+.conn-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  background: #2ecc71; vertical-align: middle; margin-left: 4px;
+  transition: background .4s;
+  box-shadow: 0 0 5px rgba(46,204,113,.6);
+}
+.conn-dot.disconnected {
+  background: #e74c3c;
+  box-shadow: 0 0 5px rgba(231,76,60,.6);
+  animation: pulse-rec .7s infinite alternate;
 }
 
 /* ── Toast ───────────────────────────────────────────────────── */

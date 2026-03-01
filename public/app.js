@@ -279,6 +279,34 @@ function toPixelSize(logicalSize) {
   return logicalSize * (liveCanvas.width / PITCH_W);
 }
 
+// ── Ramer-Douglas-Peucker stroke simplification ───────────────
+function simplifyPoints(pts, tol) {
+  if (pts.length <= 2) return pts;
+  const first = pts[0], last = pts[pts.length - 1];
+  const dx = last.x - first.x, dy = last.y - first.y;
+  const len2 = dx * dx + dy * dy;
+  let maxDist = 0, maxIdx = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    let d;
+    if (len2 === 0) {
+      const ex = pts[i].x - first.x, ey = pts[i].y - first.y;
+      d = Math.sqrt(ex * ex + ey * ey);
+    } else {
+      const t = Math.max(0, Math.min(1, ((pts[i].x - first.x) * dx + (pts[i].y - first.y) * dy) / len2));
+      const px = first.x + t * dx - pts[i].x;
+      const py = first.y + t * dy - pts[i].y;
+      d = Math.sqrt(px * px + py * py);
+    }
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > tol) {
+    const left  = simplifyPoints(pts.slice(0, maxIdx + 1), tol);
+    const right = simplifyPoints(pts.slice(maxIdx), tol);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [first, last];
+}
+
 // Check whether an erase path comes within `radius` (logical) of any stroke point
 function strokeHitsErasePath(stroke, erasePath, radius) {
   if (!stroke.points) return false;
@@ -405,7 +433,7 @@ liveCanvas.addEventListener('pointerup', e => {
       id: `${myId}-${++strokeSeq}`,
       socketId: myId,
       tool: 'draw',
-      points: [...currentPath],
+      points: simplifyPoints([...currentPath], 1.5),
       color: colorPicker.value,
       width: +sizePicker.value
     };
@@ -669,6 +697,7 @@ function connectSocket(username) {
     // Flush stale live previews from previous session so nothing lingers on reconnect
     Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
     redrawLive();
+    document.getElementById('conn-status')?.classList.remove('disconnected');
     socket.emit('join', { username });
   });
 
@@ -808,6 +837,7 @@ function connectSocket(username) {
   socket.on('cursor-remove', ({ socketId }) => removeCursor(socketId));
 
   socket.on('disconnect', () => {
+    document.getElementById('conn-status')?.classList.add('disconnected');
     toast('Disconnected. Reconnecting…');
   });
   
@@ -984,6 +1014,7 @@ function renderPresetsList() {
         <div class="preset-time">${time} · ${summary}</div>
       </div>
       <div class="preset-actions">
+        <button class="preset-load" data-id="${preset.id}" title="Load — click twice to confirm">↩</button>
         <button class="preset-edit" data-id="${preset.id}" title="Rename">✏️</button>
         <button class="preset-delete" data-id="${preset.id}" title="Delete">×</button>
       </div>
@@ -991,26 +1022,63 @@ function renderPresetsList() {
     list.appendChild(li);
   });
 
-  // Load handlers
-  list.querySelectorAll('.preset-info').forEach(el => {
-    el.addEventListener('click', () => {
-      if (confirm('Load this preset? This will replace the current board.')) {
-        socket?.emit('load-preset', { presetId: +el.dataset.id });
+  // Load handlers — two-click confirmation (no blocking confirm())
+  list.querySelectorAll('.preset-load').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const li = btn.closest('.preset-item');
+      if (li.dataset.armed === '1') {
+        li.dataset.armed = '0';
+        btn.textContent = '↩';
+        btn.style.background = '';
+        socket?.emit('load-preset', { presetId: +btn.dataset.id });
         closeModal(presetsModal);
+      } else {
+        li.dataset.armed = '1';
+        btn.textContent = '✓';
+        btn.style.background = 'var(--accent)';
+        setTimeout(() => {
+          if (li.dataset.armed === '1') {
+            li.dataset.armed = '0';
+            btn.textContent = '↩';
+            btn.style.background = '';
+          }
+        }, 2500);
       }
     });
   });
 
-  // Edit handlers
+  // Edit handlers — inline rename
   list.querySelectorAll('.preset-edit').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const preset = _boardPresets.find(p => p.id === +btn.dataset.id);
       if (!preset) return;
-      const newName = prompt('Rename preset:', preset.name);
-      if (newName && newName.trim() && newName !== preset.name) {
-        socket?.emit('rename-preset', { presetId: preset.id, newName: newName.trim() });
-      }
+      const li = btn.closest('.preset-item');
+      const nameEl = li.querySelector('.preset-name');
+      if (nameEl.querySelector('input')) return; // already editing
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'inline-rename-input';
+      input.value = preset.name;
+      input.maxLength = 60;
+      nameEl.textContent = '';
+      nameEl.appendChild(input);
+      input.focus(); input.select();
+      let cancelled = false;
+      const commit = () => {
+        if (cancelled) return;
+        const newName = input.value.trim();
+        if (newName && newName !== preset.name) {
+          socket?.emit('rename-preset', { presetId: preset.id, newName });
+        }
+        nameEl.textContent = newName || preset.name;
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+        if (ev.key === 'Escape') { cancelled = true; nameEl.textContent = preset.name; input.remove(); }
+      });
     });
   });
 
@@ -1448,16 +1516,37 @@ function renderRecordingsList() {
     });
   });
 
-  // Rename handlers
+  // Rename handlers — inline rename
   list.querySelectorAll('.rec-rename').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const recording = _recordings.find(r => r.id === +btn.dataset.id);
       if (!recording) return;
-      const newName = prompt('Rename recording:', recording.name);
-      if (newName && newName.trim() && newName !== recording.name) {
-        socket?.emit('rename-recording', { recId: recording.id, newName: newName.trim() });
-      }
+      const li = btn.closest('.recording-item');
+      const nameEl = li.querySelector('.rec-time');
+      if (nameEl.querySelector('input')) return; // already editing
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'inline-rename-input';
+      input.value = recording.name;
+      input.maxLength = 80;
+      nameEl.textContent = '';
+      nameEl.appendChild(input);
+      input.focus(); input.select();
+      let cancelled = false;
+      const commit = () => {
+        if (cancelled) return;
+        const newName = input.value.trim();
+        if (newName && newName !== recording.name) {
+          socket?.emit('rename-recording', { recId: recording.id, newName });
+        }
+        nameEl.textContent = newName || recording.name;
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+        if (ev.key === 'Escape') { cancelled = true; nameEl.textContent = recording.name; input.remove(); }
+      });
     });
   });
 
@@ -1520,10 +1609,15 @@ document.getElementById('screenshot-btn').addEventListener('click', () => {
   link.href = combined.toDataURL('image/png');
   link.click();
 });
+// Pre-fill username from previous session
+const _savedUsername = localStorage.getItem('tac-board-username');
+if (_savedUsername) usernameInput.value = _savedUsername;
+
 function doJoin() {
   const name = usernameInput.value.trim();
   if (!name) { usernameInput.focus(); return; }
   myName = name;
+  localStorage.setItem('tac-board-username', name);
   joinScreen.classList.add('hidden');
   appEl.classList.remove('hidden');
   resizeCanvases();
