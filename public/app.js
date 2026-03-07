@@ -284,7 +284,30 @@ function renderStroke(ctx, stroke) {
 function renderArrow(ctx, arrow) {
   const start = toPixel(arrow.x1, arrow.y1);
   const end   = toPixel(arrow.x2, arrow.y2);
-  drawArrowLine(ctx, start.x, start.y, end.x, end.y, arrow.color, toPixelSize(arrow.width), arrow.style);
+  if (arrow.tool === 'line') {
+    drawLineLine(ctx, start.x, start.y, end.x, end.y, arrow.color, toPixelSize(arrow.width), arrow.style);
+  } else {
+    drawArrowLine(ctx, start.x, start.y, end.x, end.y, arrow.color, toPixelSize(arrow.width), arrow.style);
+  }
+}
+
+function drawLineLine(ctx, x1, y1, x2, y2, color, width, style) {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = width;
+  ctx.lineCap     = 'round';
+
+  if (style === 'dashed') {
+    ctx.setLineDash([width * 4, width * 3]);
+  } else {
+    ctx.setLineDash([]);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 function drawArrowLine(ctx, x1, y1, x2, y2, color, width, style) {
@@ -404,12 +427,16 @@ function redrawLive() {
     liveCtx.stroke();
   }
 
-  // Arrow preview
-  if (isDrawing && activeTool === 'arrow' && arrowStart && currentPath.length) {
+  // Arrow / Line preview
+  if (isDrawing && (activeTool === 'arrow' || activeTool === 'line') && arrowStart && currentPath.length) {
     const last = currentPath[currentPath.length - 1];
     const s = toPixel(arrowStart.x, arrowStart.y);
     const e = toPixel(last.x, last.y);
-    drawArrowLine(liveCtx, s.x, s.y, e.x, e.y, colorPicker.value, toPixelSize(+sizePicker.value), 'solid');
+    if (activeTool === 'line') {
+      drawLineLine(liveCtx, s.x, s.y, e.x, e.y, colorPicker.value, toPixelSize(+sizePicker.value), arrowDashed ? 'dashed' : 'solid');
+    } else {
+      drawArrowLine(liveCtx, s.x, s.y, e.x, e.y, colorPicker.value, toPixelSize(+sizePicker.value), arrowDashed ? 'dashed' : 'solid');
+    }
   }
 
   // Eraser preview circle
@@ -441,7 +468,7 @@ liveCanvas.addEventListener('pointerdown', e => {
   isDrawing = true;
   liveCanvas.setPointerCapture(e.pointerId); // capture so pointerup fires even outside canvas
   currentPath = [pos];
-  if (activeTool === 'arrow') arrowStart = pos;
+  if (activeTool === 'arrow' || activeTool === 'line') arrowStart = pos;
 
   socket?.emit('draw-move', {
     tool: activeTool,
@@ -545,21 +572,22 @@ liveCanvas.addEventListener('pointerup', e => {
     }
   }
 
-  if (activeTool === 'arrow' && arrowStart && currentPath.length >= 2) {
+  if ((activeTool === 'arrow' || activeTool === 'line') && arrowStart && currentPath.length >= 2) {
     const last = currentPath[currentPath.length - 1];
     const tempId = `${myId}-a${++arrowSeq}`;
-    const arrow = {
+    const shape = {
       id: tempId,
       socketId: myId,
+      tool: activeTool,
       x1: arrowStart.x, y1: arrowStart.y,
       x2: last.x,       y2: last.y,
       color: colorPicker.value,
       width: +sizePicker.value,
       style: arrowDashed ? 'dashed' : 'solid'
     };
-    allArrows.push(arrow);
-    myUndoStack.push({ type: 'arrow', id: tempId, _pending: true });
-    socket?.emit('arrow-done', arrow);
+    allArrows.push(shape);
+    myUndoStack.push({ type: 'arrow', id: tempId, _pending: true }); // using 'arrow' type for both straight lines and arrows
+    socket?.emit('arrow-done', shape);
     redrawStrokes();
   }
 
@@ -1061,6 +1089,7 @@ function setTool(tool) {
 }
 
 document.getElementById('tool-draw').addEventListener('click',   () => setTool('draw'));
+document.getElementById('tool-line').addEventListener('click',   () => setTool('line'));
 document.getElementById('tool-arrow').addEventListener('click',  () => setTool('arrow'));
 document.getElementById('tool-laser').addEventListener('click',  () => setTool('laser'));
 document.getElementById('tool-erase').addEventListener('click',  () => setTool('erase'));
@@ -1394,7 +1423,8 @@ window.addEventListener('keydown', e => {
   if (e.key === 'e' || e.key === 'E') setTool('erase');
   if (e.key === 'p' || e.key === 'P') setTool('ping');
   if (e.key === 's' || e.key === 'S') setTool('select');
-  if (e.key === 'l' || e.key === 'L') setTool('laser');
+  if (e.key === 'l' || e.key === 'L') setTool('line');
+  if (e.key === 'w' || e.key === 'W') setTool('laser');
   
   if (e.key >= '1' && e.key <= '8') {
     const presets = Array.from(document.querySelectorAll('.color-preset'));
