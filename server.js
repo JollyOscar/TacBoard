@@ -17,6 +17,25 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── REST API ──────────────────────────────────────────────────
+app.get('/api/rooms', (req, res) => {
+  const list = Object.keys(rooms).map(id => ({
+    id,
+    users: Object.keys(rooms[id].users).length
+  })).filter(r => r.users > 0);  // only show rooms with active users
+  res.json(list);
+});
+
+app.get('/health', (req, res) => {
+  const totalUsers = Object.values(rooms).reduce((sum, r) => sum + Object.keys(r.users).length, 0);
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    rooms: Object.keys(rooms).length,
+    users: totalUsers
+  });
+});
+
 // ── Database setup ────────────────────────────────────────────
 let db = null;
 let useDatabase = false;
@@ -76,23 +95,36 @@ async function initDatabase() {
   }
 }
 
-// ── Shared state ──────────────────────────────────────────────
-const state = {
-  users: {},          // socketId → { username, color }
-  strokes: [],        // finished strokes  [{ points, color, width, tool }]
-  tokens: {},         // tokenId → { id, x, y, color, label, shape }
-  arrows: []          // finished arrows [{ x1,y1,x2,y2,color,style }]
-};
+// ── Per-Room State ────────────────────────────────────────────
+// Each room has its own isolated board state, recording, and replay.
+const rooms = {};  // roomId → room state object
 
-let nextTokenId = 1;
-let nextArrowId  = 1;
+function getRoom(roomId) {
+  if (!rooms[roomId]) {
+    rooms[roomId] = {
+      users: {},          // socketId → { username, color }
+      strokes: [],        // finished strokes
+      tokens: {},         // tokenId → { id, x, y, color, label, shape }
+      arrows: [],         // finished arrows
+      nextTokenId: 1,
+      nextArrowId: 1,
+      colorIndex: 0,
+      rec: { active: false, start: 0, snapshot: null, timeline: [] },
+      rep: { active: false, timers: [], preSnap: null, currentRecId: null }
+    };
+    console.log(`[+] Room "${roomId}" created`);
+  }
+  return rooms[roomId];
+}
+
+// Maps socketId → roomId so we can look up rooms on disconnect
+const socketRooms = {};
+
 const disconnectTimers = {}; // socketId → setTimeout handle for grace-period removal
 
-// ── Recording / Replay ───────────────────────────────────────
-let rec = { active: false, start: 0, snapshot: null, timeline: [] };
-let rep = { active: false, timers: [], preSnap: null, currentRecId: null };
+// ── Recording / Replay (global, shared across rooms) ─────────
 const RECORDINGS_FILE = path.join(__dirname, 'board-recordings.json');
-let recordings = [];  // Array of saved recordings: { id, name, timestamp, duration, eventCount, snapshot, timeline }
+let recordings = [];
 let nextRecId = 1;
 
 // Load recordings from database or file
@@ -133,12 +165,11 @@ async function loadRecordings() {
   }
 }
 
-// Save recordings to database or file
+// Save recordings to file (backup)
 async function saveRecordings() {
-  // Always save to file as backup
   try {
     const data = JSON.stringify({
-      recordings: recordings,  // Save full recordings with snapshot and timeline
+      recordings: recordings,
       nextId: nextRecId
     }, null, 2);
     fs.writeFileSync(RECORDINGS_FILE, data, 'utf8');
@@ -150,21 +181,11 @@ async function saveRecordings() {
 // Add recording to database
 async function addRecordingToDB(recording) {
   if (!useDatabase || !db) return;
-  
   try {
-    const result = await db.query(
+    await db.query(
       'INSERT INTO recordings (id, name, timestamp, duration, event_count, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [
-        recording.id,
-        recording.name,
-        recording.timestamp,
-        recording.duration,
-        recording.eventCount,
-        JSON.stringify({
-          snapshot: recording.snapshot,
-          timeline: recording.timeline
-        })
-      ]
+      [recording.id, recording.name, recording.timestamp, recording.duration, recording.eventCount,
+        JSON.stringify({ snapshot: recording.snapshot, timeline: recording.timeline })]
     );
     console.log(`[+] Recording ${recording.id} saved to database`);
   } catch (err) {
@@ -175,16 +196,9 @@ async function addRecordingToDB(recording) {
 // Update recording in database
 async function updateRecordingInDB(recording) {
   if (!useDatabase || !db) return;
-  
   try {
-    await db.query(
-      'UPDATE recordings SET name = $1, timestamp = $2 WHERE id = $3',
-      [
-        recording.name,
-        recording.timestamp,
-        recording.id
-      ]
-    );
+    await db.query('UPDATE recordings SET name = $1, timestamp = $2 WHERE id = $3',
+      [recording.name, recording.timestamp, recording.id]);
     console.log(`[+] Recording ${recording.id} updated in database`);
   } catch (err) {
     console.error('[!] Error updating recording in database:', err.message);
@@ -194,7 +208,6 @@ async function updateRecordingInDB(recording) {
 // Delete recording from database
 async function deleteRecordingFromDB(recId) {
   if (!useDatabase || !db) return;
-  
   try {
     await db.query('DELETE FROM recordings WHERE id = $1', [recId]);
     console.log(`[+] Recording ${recId} deleted from database`);
@@ -203,9 +216,9 @@ async function deleteRecordingFromDB(recId) {
   }
 }
 
-// ── Board Presets ─────────────────────────────────────────────
+// ── Board Presets (global, shared across rooms) ───────────────
 const PRESETS_FILE = path.join(__dirname, 'board-presets.json');
-let boardPresets = [];  // Array of saved board states: { id, name, timestamp, strokes, arrows, tokens }
+let boardPresets = [];
 let nextPresetId = 1;
 
 // Load presets from database or file
@@ -247,10 +260,9 @@ async function loadPresets() {
 
 // Save presets to file (backup)
 async function savePresets() {
-  // Always save to file as backup
   try {
     const data = JSON.stringify({
-      presets: boardPresets,  // Save full presets with strokes, arrows, tokens
+      presets: boardPresets,
       nextId: nextPresetId
     }, null, 2);
     fs.writeFileSync(PRESETS_FILE, data, 'utf8');
@@ -259,64 +271,34 @@ async function savePresets() {
   }
 }
 
-// Add preset to database
+// Preset DB helpers
 async function addPresetToDB(preset) {
   if (!useDatabase || !db) return;
-  
   try {
-    const result = await db.query(
-      'INSERT INTO presets (id, name, timestamp, data) VALUES ($1, $2, $3, $4) RETURNING id',
-      [
-        preset.id,
-        preset.name,
-        preset.timestamp,
-        JSON.stringify({
-          strokes: preset.strokes,
-          arrows: preset.arrows,
-          tokens: preset.tokens
-        })
-      ]
-    );
+    await db.query('INSERT INTO presets (id, name, timestamp, data) VALUES ($1, $2, $3, $4) RETURNING id',
+      [preset.id, preset.name, preset.timestamp,
+        JSON.stringify({ strokes: preset.strokes, arrows: preset.arrows, tokens: preset.tokens })]);
     console.log(`[+] Preset ${preset.id} saved to database`);
-  } catch (err) {
-    console.error('[!] Error saving preset to database:', err.message);
-  }
+  } catch (err) { console.error('[!] Error saving preset to database:', err.message); }
 }
 
-// Delete preset from database
 async function deletePresetFromDB(presetId) {
   if (!useDatabase || !db) return;
-  
   try {
     await db.query('DELETE FROM presets WHERE id = $1', [presetId]);
     console.log(`[+] Preset ${presetId} deleted from database`);
-  } catch (err) {
-    console.error('[!] Error deleting preset from database:', err.message);
-  }
+  } catch (err) { console.error('[!] Error deleting preset from database:', err.message); }
 }
 
-// Update preset in database
 async function updatePresetInDB(preset) {
   if (!useDatabase || !db) return;
-  
   try {
-    await db.query(
-      'UPDATE presets SET name = $1, timestamp = $2, data = $3 WHERE id = $4',
-      [
-        preset.name,
-        preset.timestamp,
-        JSON.stringify({
-          strokes: preset.strokes,
-          arrows: preset.arrows,
-          tokens: preset.tokens
-        }),
-        preset.id
-      ]
-    );
+    await db.query('UPDATE presets SET name = $1, timestamp = $2, data = $3 WHERE id = $4',
+      [preset.name, preset.timestamp,
+        JSON.stringify({ strokes: preset.strokes, arrows: preset.arrows, tokens: preset.tokens }),
+        preset.id]);
     console.log(`[+] Preset ${preset.id} updated in database`);
-  } catch (err) {
-    console.error('[!] Error updating preset in database:', err.message);
-  }
+  } catch (err) { console.error('[!] Error updating preset in database:', err.message); }
 }
 
 function getBoardPresetsList() {
@@ -330,38 +312,6 @@ function getBoardPresetsList() {
   }));
 }
 
-function recordEvent(event, data) {
-  if (!rec.active) return;
-  rec.timeline.push({ t: Date.now() - rec.start, event, data });
-}
-
-function snapState() {
-  return {
-    strokes: JSON.parse(JSON.stringify(state.strokes)),
-    arrows:  JSON.parse(JSON.stringify(state.arrows)),
-    tokens:  JSON.parse(JSON.stringify(state.tokens))
-  };
-}
-
-function finishReplay() {
-  rep.timers.forEach(clearTimeout);
-  rep.timers = [];
-  rep.active = false;
-  rep.currentRecId = null;
-  const s = rep.preSnap;
-  state.strokes = s.strokes;
-  state.arrows  = s.arrows;
-  state.tokens  = s.tokens;
-  io.emit('clear-board');
-  io.emit('tokens-cleared');
-  io.emit('replay-restore', {
-    strokes: s.strokes,
-    arrows:  s.arrows,
-    tokens:  Object.values(s.tokens)
-  });
-  io.emit('replay-done');
-}
-
 function getRecordingsList() {
   return recordings.map(r => ({
     id: r.id,
@@ -372,252 +322,384 @@ function getRecordingsList() {
   }));
 }
 
+// ── Room helpers ──────────────────────────────────────────────
+function recordEvent(room, event, data) {
+  if (!room.rec.active) return;
+  room.rec.timeline.push({ t: Date.now() - room.rec.start, event, data });
+}
+
+function snapState(room) {
+  return {
+    strokes: JSON.parse(JSON.stringify(room.strokes)),
+    arrows:  JSON.parse(JSON.stringify(room.arrows)),
+    tokens:  JSON.parse(JSON.stringify(room.tokens))
+  };
+}
+
+function finishReplay(roomId) {
+  const room = getRoom(roomId);
+  room.rep.timers.forEach(clearTimeout);
+  room.rep.timers = [];
+  room.rep.active = false;
+  room.rep.currentRecId = null;
+  const s = room.rep.preSnap;
+  room.strokes = s.strokes;
+  room.arrows  = s.arrows;
+  room.tokens  = s.tokens;
+  io.to(roomId).emit('clear-board');
+  io.to(roomId).emit('tokens-cleared');
+  io.to(roomId).emit('replay-restore', {
+    strokes: s.strokes,
+    arrows:  s.arrows,
+    tokens:  Object.values(s.tokens)
+  });
+  io.to(roomId).emit('replay-done');
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 const USER_COLORS = [
   '#e74c3c','#3498db','#2ecc71','#f39c12',
   '#9b59b6','#1abc9c','#e67e22','#e91e63'
 ];
-let colorIndex = 0;
 
-function getNextColor() {
-  const c = USER_COLORS[colorIndex % USER_COLORS.length];
-  colorIndex++;
+function getNextColor(room) {
+  const c = USER_COLORS[room.colorIndex % USER_COLORS.length];
+  room.colorIndex++;
   return c;
 }
 
-function broadcastUserList() {
-  io.emit('user-list', Object.values(state.users));
+// ── Rate Limiting ─────────────────────────────────────────────
+const rateLimits = {};  // socketId → { count, resetAt }
+const RATE_LIMIT_MAX = 60;  // max events per second
+const RATE_LIMIT_WINDOW = 1000;  // 1 second window
+
+function isRateLimited(socketId) {
+  const now = Date.now();
+  if (!rateLimits[socketId] || now > rateLimits[socketId].resetAt) {
+    rateLimits[socketId] = { count: 1, resetAt: now + RATE_LIMIT_WINDOW };
+    return false;
+  }
+  rateLimits[socketId].count++;
+  if (rateLimits[socketId].count > RATE_LIMIT_MAX) {
+    return true; // over limit, drop this event
+  }
+  return false;
 }
 
 // ── Socket events ─────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[+] connected: ${socket.id}`);
 
-  // 1. New user joins
-  socket.on('join', ({ username }) => {
+  // 1. New user joins a room
+  socket.on('join', ({ username, room: roomId }) => {
+    // Sanitize inputs
+    username = (username || 'Anonymous').toString().trim().substring(0, 20) || 'Anonymous';
+    roomId = (roomId || 'lobby').toString().trim().substring(0, 40).replace(/[^a-zA-Z0-9_-]/g, '-') || 'lobby';
+
     // Cancel any pending disconnect grace timer for this socket
     if (disconnectTimers[socket.id]) {
       clearTimeout(disconnectTimers[socket.id]);
       delete disconnectTimers[socket.id];
     }
 
+    // If socket was in a different room, leave it first
+    const prevRoom = socketRooms[socket.id];
+    if (prevRoom && prevRoom !== roomId) {
+      socket.leave(prevRoom);
+      const oldRoom = getRoom(prevRoom);
+      delete oldRoom.users[socket.id];
+      io.to(prevRoom).emit('user-list', Object.values(oldRoom.users));
+    }
+
+    // Join the Socket.IO room
+    socket.join(roomId);
+    socketRooms[socket.id] = roomId;
+    const room = getRoom(roomId);
+
     // Remove any stale entry for this socket id
-    if (state.users[socket.id]) {
-      delete state.users[socket.id];
+    if (room.users[socket.id]) {
+      delete room.users[socket.id];
     }
 
     // Remove any previous connection for the same username (cross-socket reconnect)
-    const existingSocketId = Object.keys(state.users).find(
-      id => state.users[id].username === username
+    const existingSocketId = Object.keys(room.users).find(
+      id => room.users[id].username === username
     );
     let color;
     if (existingSocketId) {
-      color = state.users[existingSocketId].color; // keep their colour
-      delete state.users[existingSocketId];
+      color = room.users[existingSocketId].color; // keep their colour
+      delete room.users[existingSocketId];
     } else {
-      color = getNextColor();
+      color = getNextColor(room);
     }
-    state.users[socket.id] = { id: socket.id, username, color };
+    room.users[socket.id] = { id: socket.id, username, color };
 
     // Send full current state to the new user
     socket.emit('init-state', {
-      strokes: state.strokes,
-      tokens: Object.values(state.tokens),
-      arrows: state.arrows,
-      users: Object.values(state.users),
-      you: state.users[socket.id]
+      strokes: room.strokes,
+      tokens: Object.values(room.tokens),
+      arrows: room.arrows,
+      users: Object.values(room.users),
+      you: room.users[socket.id],
+      room: roomId
     });
 
     // Proactively push lists so client doesn't need to request them
     socket.emit('recordings-list', getRecordingsList());
     socket.emit('presets-list', getBoardPresetsList());
 
-    // Announce join to others and send them updated user list
-    socket.broadcast.emit('user-joined', state.users[socket.id]);
-    socket.broadcast.emit('user-list', Object.values(state.users));
-    console.log(`  username: ${username}`);
+    // Announce join to others in the same room
+    socket.to(roomId).emit('user-joined', room.users[socket.id]);
+    socket.to(roomId).emit('user-list', Object.values(room.users));
+    console.log(`  username: ${username} → room: ${roomId}`);
   });
 
   // 2. Live drawing (broadcast only, not stored)
   socket.on('draw-move', (data) => {
-    socket.broadcast.emit('draw-move', {
+    if (isRateLimited(socket.id)) return;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    socket.to(roomId).emit('draw-move', {
       ...data,
       socketId: socket.id,
-      color: state.users[socket.id]?.color || '#fff'
+      color: room.users[socket.id]?.color || '#fff'
     });
   });
 
-  // 3. Completed stroke — store it (tag with sender's socketId)
+  // 2b. Ping (broadcast only, not stored)
+  socket.on('board-ping', (data) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    socket.to(roomId).emit('board-ping', {
+      ...data,
+      socketId: socket.id,
+      color: room.users[socket.id]?.color || '#fff'
+    });
+  });
+
+  // 3. Completed stroke — store it
   socket.on('stroke-done', (stroke) => {
+    if (isRateLimited(socket.id)) return;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+
+    // Basic protection against malicious huge payloads
+    if (stroke && stroke.points && stroke.points.length > 5000) {
+      console.log(`[!] Rejected large stroke (${stroke.points.length} points) from ${socket.id}`);
+      return;
+    }
+    
     const saved = { ...stroke, socketId: socket.id };
-    state.strokes.push(saved);
-    console.log(`[*] Stroke added. Total strokes in state: ${state.strokes.length}`);
-    socket.broadcast.emit('stroke-done', saved);
-    recordEvent('stroke-done', saved);
+    room.strokes.push(saved);
+    socket.to(roomId).emit('stroke-done', saved);
+    recordEvent(room, 'stroke-done', saved);
   });
 
-  // 3b. Remove specific strokes by ID (own-lines-only erase)
+  // 3b. Remove specific strokes by ID
   socket.on('stroke-remove', ({ ids }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
     ids.forEach(id => {
-      const idx = state.strokes.findIndex(s => s.id === id);
-      if (idx !== -1) state.strokes.splice(idx, 1);
+      const idx = room.strokes.findIndex(s => s.id === id);
+      if (idx !== -1) room.strokes.splice(idx, 1);
     });
-    io.emit('stroke-remove', { ids });
-    recordEvent('stroke-remove', { ids });
+    io.to(roomId).emit('stroke-remove', { ids });
+    recordEvent(room, 'stroke-remove', { ids });
   });
 
   // 4. Token added
   socket.on('token-add', (token) => {
-    const id = `t${nextTokenId++}`;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    const id = `t${room.nextTokenId++}`;
     const newToken = { ...token, id };
-    state.tokens[id] = newToken;
-    io.emit('token-add', newToken);
-    recordEvent('token-add', newToken);
+    room.tokens[id] = newToken;
+    io.to(roomId).emit('token-add', newToken);
+    recordEvent(room, 'token-add', newToken);
   });
 
   // 5. Token moved
   socket.on('token-move', ({ id, x, y }) => {
-    if (state.tokens[id]) {
-      state.tokens[id].x = x;
-      state.tokens[id].y = y;
-      socket.broadcast.emit('token-move', { id, x, y });
-      recordEvent('token-move', { id, x, y });
+    if (isRateLimited(socket.id)) return;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (room.tokens[id]) {
+      room.tokens[id].x = x;
+      room.tokens[id].y = y;
+      socket.to(roomId).emit('token-move', { id, x, y });
+      recordEvent(room, 'token-move', { id, x, y });
     }
   });
 
   // 6. Token removed
   socket.on('token-remove', ({ id }) => {
-    delete state.tokens[id];
-    io.emit('token-remove', { id });
-    recordEvent('token-remove', { id });
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    delete room.tokens[id];
+    io.to(roomId).emit('token-remove', { id });
+    recordEvent(room, 'token-remove', { id });
   });
 
   // 6b. Token label edit
   socket.on('token-relabel', ({ id, label }) => {
-    if (state.tokens[id]) state.tokens[id].label = label;
-    io.emit('token-relabel', { id, label });
-    recordEvent('token-relabel', { id, label });
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (room.tokens[id]) room.tokens[id].label = label;
+    io.to(roomId).emit('token-relabel', { id, label });
+    recordEvent(room, 'token-relabel', { id, label });
   });
 
   // 7. Arrow added
   socket.on('arrow-done', (arrow) => {
-    const saved = { ...arrow, id: `ar${nextArrowId++}`, socketId: socket.id };
-    state.arrows.push(saved);
-    // Broadcast to others, and send confirmed id back to sender separately
-    socket.broadcast.emit('arrow-done', saved);
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    const saved = { ...arrow, id: `ar${room.nextArrowId++}`, socketId: socket.id };
+    room.arrows.push(saved);
+    socket.to(roomId).emit('arrow-done', saved);
     socket.emit('arrow-confirmed', { tempId: arrow.id, arrow: saved });
-    recordEvent('arrow-done', saved);
+    recordEvent(room, 'arrow-done', saved);
   });
 
   // 7b. Arrow removed (undo)
   socket.on('arrow-remove', ({ ids }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
     ids.forEach(id => {
-      const idx = state.arrows.findIndex(a => a.id === id);
-      if (idx !== -1) state.arrows.splice(idx, 1);
+      const idx = room.arrows.findIndex(a => a.id === id);
+      if (idx !== -1) room.arrows.splice(idx, 1);
     });
-    io.emit('arrow-remove', { ids });
-    recordEvent('arrow-remove', { ids });
+    io.to(roomId).emit('arrow-remove', { ids });
+    recordEvent(room, 'arrow-remove', { ids });
   });
 
   // 8. Clear board
   socket.on('clear-board', () => {
-    console.log(`[*] Board cleared. Previous state: ${state.strokes.length} strokes, ${state.arrows.length} arrows, ${Object.keys(state.tokens).length} tokens`);
-    state.strokes = [];
-    state.arrows = [];
-    state.tokens = {}; // also wipe tokens so late joiners don't see ghosts
-    io.emit('clear-board');
-    io.emit('tokens-cleared'); // tell clients to remove all token DOM elements
-    recordEvent('clear-board', {});
-    recordEvent('tokens-cleared', {});
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    room.strokes = [];
+    room.arrows = [];
+    room.tokens = {};
+    io.to(roomId).emit('clear-board');
+    io.to(roomId).emit('tokens-cleared');
+    recordEvent(room, 'clear-board', {});
+    recordEvent(room, 'tokens-cleared', {});
   });
 
   // 9. Clear drawings only
   socket.on('clear-drawings', () => {
-    console.log(`[*] Drawings cleared. Previous state: ${state.strokes.length} strokes, ${state.arrows.length} arrows`);
-    state.strokes = [];
-    state.arrows = [];
-    io.emit('clear-board');
-    recordEvent('clear-board', {});
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    room.strokes = [];
+    room.arrows = [];
+    io.to(roomId).emit('clear-board');
+    recordEvent(room, 'clear-board', {});
   });
 
   // 10. Cursor movement
   socket.on('cursor-move', ({ x, y }) => {
-    socket.broadcast.emit('cursor-move', {
+    if (isRateLimited(socket.id)) return;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    socket.to(roomId).emit('cursor-move', {
       socketId: socket.id,
-      username: state.users[socket.id]?.username || '?',
-      color: state.users[socket.id]?.color || '#fff',
+      username: room.users[socket.id]?.username || '?',
+      color: room.users[socket.id]?.color || '#fff',
       x, y
     });
   });
 
   // 10b. Recording controls
   socket.on('recording-start', () => {
-    if (rec.active || rep.active) return;
-    rec.active   = true;
-    rec.start    = Date.now();
-    rec.timeline = [];
-    rec.snapshot = snapState();
-    io.emit('recording-started');
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (room.rec.active || room.rep.active) return;
+    room.rec.active   = true;
+    room.rec.start    = Date.now();
+    room.rec.timeline = [];
+    room.rec.snapshot = snapState(room);
+    io.to(roomId).emit('recording-started');
   });
 
   socket.on('recording-stop', () => {
-    if (!rec.active) return;
-    rec.active = false;
-    const duration = rec.timeline.length
-      ? rec.timeline[rec.timeline.length - 1].t
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (!room.rec.active) return;
+    room.rec.active = false;
+    const duration = room.rec.timeline.length
+      ? room.rec.timeline[room.rec.timeline.length - 1].t
       : 0;
     const savedRec = {
       id: nextRecId++,
       name: `Recording ${new Date().toLocaleString()}`,
       timestamp: Date.now(),
       duration,
-      eventCount: rec.timeline.length,
-      snapshot: rec.snapshot,
-      timeline: rec.timeline
+      eventCount: room.rec.timeline.length,
+      snapshot: room.rec.snapshot,
+      timeline: room.rec.timeline
     };
     recordings.push(savedRec);
-    addRecordingToDB(savedRec).then(() => saveRecordings()); // Persist to database and file
-    io.emit('recording-saved', getRecordingsList());
+    addRecordingToDB(savedRec).then(() => saveRecordings());
+    io.to(roomId).emit('recording-saved', getRecordingsList());
   });
 
   // 10c. Replay controls
   socket.on('replay-start', ({ recId }) => {
-    if (rep.active) return;
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (room.rep.active) return;
     const recording = recordings.find(r => r.id === recId);
     if (!recording) return;
 
-    rep.active       = true;
-    rep.currentRecId = recId;
-    rep.preSnap      = snapState();
+    room.rep.active       = true;
+    room.rep.currentRecId = recId;
+    room.rep.preSnap      = snapState(room);
 
-    // Temporarily set server state to recording snapshot so late-joiners see it
-    state.strokes = JSON.parse(JSON.stringify(recording.snapshot.strokes));
-    state.arrows  = JSON.parse(JSON.stringify(recording.snapshot.arrows));
-    state.tokens  = JSON.parse(JSON.stringify(recording.snapshot.tokens));
+    // Temporarily set room state to recording snapshot
+    room.strokes = JSON.parse(JSON.stringify(recording.snapshot.strokes));
+    room.arrows  = JSON.parse(JSON.stringify(recording.snapshot.arrows));
+    room.tokens  = JSON.parse(JSON.stringify(recording.snapshot.tokens));
 
-    io.emit('clear-board');
-    io.emit('tokens-cleared');
-    io.emit('replay-started', { duration: recording.duration, recId });
-    // Small delay so clients clear before snapshot arrives
+    io.to(roomId).emit('clear-board');
+    io.to(roomId).emit('tokens-cleared');
+    io.to(roomId).emit('replay-started', { duration: recording.duration, recId });
     setTimeout(() => {
-      io.emit('replay-init', {
+      io.to(roomId).emit('replay-init', {
         strokes: recording.snapshot.strokes,
         arrows:  recording.snapshot.arrows,
         tokens:  Object.values(recording.snapshot.tokens)
       });
     }, 150);
 
-    rep.timers = [];
+    room.rep.timers = [];
     recording.timeline.forEach(entry => {
-      const tid = setTimeout(() => io.emit(entry.event, entry.data), entry.t + 350);
-      rep.timers.push(tid);
+      const tid = setTimeout(() => io.to(roomId).emit(entry.event, entry.data), entry.t + 350);
+      room.rep.timers.push(tid);
     });
-    const endTid = setTimeout(finishReplay, recording.duration + 900);
-    rep.timers.push(endTid);
+    const endTid = setTimeout(() => finishReplay(roomId), recording.duration + 900);
+    room.rep.timers.push(endTid);
   });
 
   socket.on('replay-stop', () => {
-    if (rep.active) finishReplay();
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (room.rep.active) finishReplay(roomId);
   });
 
   socket.on('get-recordings', () => {
@@ -628,7 +710,7 @@ io.on('connection', (socket) => {
     const recording = recordings.find(r => r.id === recId);
     if (recording) {
       recording.name = newName;
-      updateRecordingInDB(recording).then(() => saveRecordings()); // Update database and file
+      updateRecordingInDB(recording).then(() => saveRecordings());
       io.emit('recordings-list', getRecordingsList());
     }
   });
@@ -637,44 +719,65 @@ io.on('connection', (socket) => {
     const idx = recordings.findIndex(r => r.id === recId);
     if (idx !== -1) {
       recordings.splice(idx, 1);
-      deleteRecordingFromDB(recId).then(() => saveRecordings()); // Delete from database and update file
+      deleteRecordingFromDB(recId).then(() => saveRecordings());
       io.emit('recordings-list', getRecordingsList());
     }
   });
 
   // 10d. Board presets
   socket.on('save-preset', ({ name }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
     const preset = {
       id: nextPresetId++,
       name: name || `Preset ${new Date().toLocaleString()}`,
       timestamp: Date.now(),
-      strokes: JSON.parse(JSON.stringify(state.strokes)),
-      arrows: JSON.parse(JSON.stringify(state.arrows)),
-      tokens: JSON.parse(JSON.stringify(state.tokens))
+      strokes: JSON.parse(JSON.stringify(room.strokes)),
+      arrows: JSON.parse(JSON.stringify(room.arrows)),
+      tokens: JSON.parse(JSON.stringify(room.tokens))
     };
     
-    // Log what we're saving
     console.log(`[*] Saving preset "${preset.name}": ${preset.strokes.length} strokes, ${preset.arrows.length} arrows, ${Object.keys(preset.tokens).length} tokens`);
     
     boardPresets.push(preset);
-    addPresetToDB(preset).then(() => savePresets()); // Persist to database and file
-    io.emit('presets-list', getBoardPresetsList());
+    addPresetToDB(preset).then(() => savePresets());
+    io.to(roomId).emit('presets-list', getBoardPresetsList());
     socket.emit('preset-saved', { id: preset.id, name: preset.name });
   });
 
   socket.on('load-preset', ({ presetId }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
     const preset = boardPresets.find(p => p.id === presetId);
     if (!preset) return;
-    console.log(`[*] Loading preset "${preset.name}": ${preset.strokes.length} strokes, ${preset.arrows.length} arrows, ${Object.keys(preset.tokens).length} tokens`);
-    state.strokes = JSON.parse(JSON.stringify(preset.strokes));
-    state.arrows = JSON.parse(JSON.stringify(preset.arrows));
-    state.tokens = JSON.parse(JSON.stringify(preset.tokens));
-    io.emit('clear-board');
-    io.emit('tokens-cleared');
-    io.emit('preset-loaded', {
+    room.strokes = JSON.parse(JSON.stringify(preset.strokes));
+    room.arrows = JSON.parse(JSON.stringify(preset.arrows));
+    room.tokens = JSON.parse(JSON.stringify(preset.tokens));
+    io.to(roomId).emit('clear-board');
+    io.to(roomId).emit('tokens-cleared');
+    io.to(roomId).emit('preset-loaded', {
       strokes: preset.strokes,
       arrows: preset.arrows,
       tokens: Object.values(preset.tokens)
+    });
+  });
+
+  socket.on('import-board', ({ strokes, arrows, tokens }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    room.strokes = JSON.parse(JSON.stringify(strokes || []));
+    room.arrows = JSON.parse(JSON.stringify(arrows || []));
+    room.tokens = {};
+    (tokens || []).forEach(t => { room.tokens[t.id] = t; });
+    io.to(roomId).emit('clear-board');
+    io.to(roomId).emit('tokens-cleared');
+    io.to(roomId).emit('preset-loaded', {
+      strokes: room.strokes,
+      arrows: room.arrows,
+      tokens: Object.values(room.tokens)
     });
   });
 
@@ -682,7 +785,7 @@ io.on('connection', (socket) => {
     const preset = boardPresets.find(p => p.id === presetId);
     if (preset) {
       preset.name = newName;
-      updatePresetInDB(preset).then(() => savePresets()); // Update database and file
+      updatePresetInDB(preset).then(() => savePresets());
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -691,7 +794,7 @@ io.on('connection', (socket) => {
     const idx = boardPresets.findIndex(p => p.id === presetId);
     if (idx !== -1) {
       boardPresets.splice(idx, 1);
-      deletePresetFromDB(presetId).then(() => savePresets()); // Delete from database and update file
+      deletePresetFromDB(presetId).then(() => savePresets());
       io.emit('presets-list', getBoardPresetsList());
     }
   });
@@ -702,20 +805,34 @@ io.on('connection', (socket) => {
 
   // 11. Disconnect — use a grace period so brief hiccups don't spam user-left
   socket.on('disconnect', () => {
-    console.log(`[-] disconnected: ${socket.id}`);
-    socket.broadcast.emit('cursor-remove', { socketId: socket.id });
+    const roomId = socketRooms[socket.id];
+    console.log(`[-] disconnected: ${socket.id} (room: ${roomId || 'none'})`);
 
-    // Wait 8 seconds before removing user — if they reconnect in time the join
-    // handler cancels this timer and they keep their slot without a user-left event
+    if (roomId) {
+      socket.to(roomId).emit('cursor-remove', { socketId: socket.id });
+    }
+
+    // Wait 8 seconds before removing user
     disconnectTimers[socket.id] = setTimeout(() => {
       delete disconnectTimers[socket.id];
-      const departedUser = state.users[socket.id];
-      if (!departedUser) return; // already cleaned up by a new join
-      delete state.users[socket.id];
-      console.log(`[-] removed user: ${departedUser.username}`);
-      io.emit('cursor-remove', { socketId: socket.id });
-      io.emit('user-left', departedUser);
-      io.emit('user-list', Object.values(state.users));
+      if (!roomId) return;
+      const room = rooms[roomId];
+      if (!room) return;
+      const departedUser = room.users[socket.id];
+      if (!departedUser) return;
+      delete room.users[socket.id];
+      delete socketRooms[socket.id];
+      delete rateLimits[socket.id];
+      console.log(`[-] removed user: ${departedUser.username} from room: ${roomId}`);
+      io.to(roomId).emit('cursor-remove', { socketId: socket.id });
+      io.to(roomId).emit('user-left', departedUser);
+      io.to(roomId).emit('user-list', Object.values(room.users));
+
+      // Clean up empty rooms to prevent memory leaks
+      if (Object.keys(room.users).length === 0) {
+        delete rooms[roomId];
+        console.log(`[*] Room "${roomId}" cleaned up (empty)`);
+      }
     }, 8000);
   });
 });
@@ -732,6 +849,7 @@ async function startServer() {
     server.listen(PORT, () => {
       console.log(`⚽ Tac Board running → http://localhost:${PORT}`);
       console.log(`📊 Database mode: ${useDatabase ? 'PostgreSQL' : 'File-based'}`);
+      console.log(`🏠 Room system: enabled (URL hash-based)`);
     });
   } catch (err) {
     console.error('[!] Server startup error:', err.message);

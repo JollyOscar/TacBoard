@@ -6,6 +6,7 @@
 const joinScreen   = document.getElementById('join-screen');
 const appEl        = document.getElementById('app');
 const usernameInput= document.getElementById('username-input');
+const roomInput    = document.getElementById('room-input');
 const joinBtn      = document.getElementById('join-btn');
 
 const pitchCanvas  = document.getElementById('pitch-canvas');
@@ -32,8 +33,9 @@ let socket;
 let myId    = null;
 let myColor = '#ffffff';
 let myName  = '';
+let myRoom  = 'lobby';
 
-let activeTool   = 'draw'; // draw | arrow | erase | select
+let activeTool   = 'draw'; // draw | arrow | erase | ping | select
 let isDrawing    = false;
 let currentPath  = [];   // [{x,y}] for current stroke
 let arrowStart   = null; // {x,y} for arrow tool
@@ -385,9 +387,17 @@ let lastMousePos = null;
 // ── Pointer events on liveCanvas ──────────────────────────────
 liveCanvas.addEventListener('pointerdown', e => {
   if (activeTool === 'select' || isReplaying) return;
+  const pos = toLogical(e.clientX, e.clientY);
+
+  if (activeTool === 'ping') {
+    // Render local ping immediately and emit
+    renderPing(pos.x, pos.y, colorPicker.value);
+    socket?.emit('board-ping', { x: pos.x, y: pos.y, color: colorPicker.value });
+    return; // Don't start drawing
+  }
+
   isDrawing = true;
   liveCanvas.setPointerCapture(e.pointerId); // capture so pointerup fires even outside canvas
-  const pos = toLogical(e.clientX, e.clientY);
   currentPath = [pos];
   if (activeTool === 'arrow') arrowStart = pos;
 
@@ -520,6 +530,7 @@ function createTokenEl(token) {
     el.style.background = token.color;
     if (token.color === '#ffffff' || token.color === '#fff') el.style.color = '#222';
   }
+  el.classList.add('pop-in');
 
   // Place
   positionToken(el, token.x, token.y);
@@ -698,12 +709,19 @@ function connectSocket(username) {
     Object.keys(liveStrokes).forEach(k => delete liveStrokes[k]);
     redrawLive();
     document.getElementById('conn-status')?.classList.remove('disconnected');
-    socket.emit('join', { username });
+    socket.emit('join', { username, room: myRoom });
   });
 
-  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you }) => {
+  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you, room }) => {
     myColor = you.color;
     colorPicker.value = myColor;
+
+    // Update room badge
+    if (room) {
+      myRoom = room;
+      const badge = document.getElementById('room-badge');
+      if (badge) badge.textContent = '🏠 ' + room;
+    }
 
     // Re-render strokes
     allStrokes.length = 0; allArrows.length = 0;
@@ -738,6 +756,11 @@ function connectSocket(username) {
   socket.on('draw-move', ({ socketId, tool, width, points, color }) => {
     liveStrokes[socketId] = { tool, width, points, color };
     redrawLive();
+  });
+
+  // Ping from others
+  socket.on('board-ping', ({ x, y, color }) => {
+    renderPing(x, y, color);
   });
 
   // Finished stroke from others
@@ -925,12 +948,14 @@ function setTool(tool) {
   document.getElementById('tool-' + tool)?.classList.add('active');
   liveCanvas.style.cursor = tool === 'select' ? 'default'
     : tool === 'erase' ? 'cell'
+    : tool === 'ping' ? 'crosshair'
     : 'crosshair';
 }
 
 document.getElementById('tool-draw').addEventListener('click',   () => setTool('draw'));
 document.getElementById('tool-arrow').addEventListener('click',  () => setTool('arrow'));
 document.getElementById('tool-erase').addEventListener('click',  () => setTool('erase'));
+document.getElementById('tool-ping').addEventListener('click',   () => setTool('ping'));
 document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
 document.getElementById('tool-undo').addEventListener('click',   () => undoLast());
 
@@ -1100,6 +1125,63 @@ document.getElementById('save-preset-btn').addEventListener('click', () => {
   }
 });
 
+// ── Export / Import ─────────────────────────────────────────────────
+document.getElementById('export-board-btn').addEventListener('click', () => {
+  const data = {
+    strokes: allStrokes,
+    arrows: allArrows,
+    tokens: Object.values(tokens)
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tacboard-export-${new Date().toISOString().slice(0,10)}.tacboard`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  toast('⬇️ Board exported');
+  closeModal(document.getElementById('presets-modal'));
+});
+
+const importFileInput = document.getElementById('import-file');
+document.getElementById('import-board-btn').addEventListener('click', () => {
+  importFileInput.click();
+});
+
+importFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data.strokes) || !Array.isArray(data.arrows) || !Array.isArray(data.tokens)) {
+        throw new Error('Invalid file format');
+      }
+      
+      socket?.emit('import-board', {
+        strokes: data.strokes,
+        arrows: data.arrows,
+        tokens: data.tokens
+      });
+      
+      toast('⬆️ Board imported successfully');
+      closeModal(document.getElementById('presets-modal'));
+    } catch (err) {
+      toast('❌ Error loading file: Invalid format');
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // Reset input
+});
+
 function updateClearBtnLabels() {
   const linesBtn = document.getElementById('clear-drawings-btn');
   const allBtn   = document.getElementById('clear-board-btn');
@@ -1201,8 +1283,37 @@ window.addEventListener('keydown', e => {
   if (e.key === 'd' || e.key === 'D') setTool('draw');
   if (e.key === 'a' || e.key === 'A') setTool('arrow');
   if (e.key === 'e' || e.key === 'E') setTool('erase');
+  if (e.key === 'p' || e.key === 'P') setTool('ping');
   if (e.key === 's' || e.key === 'S') setTool('select');
+  
+  if (e.key >= '1' && e.key <= '8') {
+    const presets = Array.from(document.querySelectorAll('.color-preset'));
+    const index = parseInt(e.key) - 1;
+    if (presets[index]) {
+      presets[index].click();
+      toast(`Color changed: <span style="color:${presets[index].dataset.color}">■</span>`, 1000);
+    }
+  }
 });
+
+// ── Ping Renderer ───────────────────────────────────────────
+function renderPing(lx, ly, color) {
+  const el = document.createElement('div');
+  el.className = 'ping-blip';
+  el.style.borderColor = color;
+  
+  const rect = canvasStack.getBoundingClientRect();
+  const scaleX = rect.width / PITCH_W;
+  const scaleY = rect.height / PITCH_H;
+  
+  el.style.left = (lx * scaleX) + 'px';
+  el.style.top = (ly * scaleY) + 'px';
+  
+  cursorLayer.appendChild(el);
+  
+  // Clean up after animation
+  setTimeout(() => el.remove(), 850);
+}
 
 // ── Recording / Replay ───────────────────────────────────────
 let _recActive      = false;  // true while server-side recording is active
@@ -1613,11 +1724,59 @@ document.getElementById('screenshot-btn').addEventListener('click', () => {
 const _savedUsername = localStorage.getItem('tac-board-username');
 if (_savedUsername) usernameInput.value = _savedUsername;
 
+// Pre-fill room from URL hash or localStorage
+const _hashRoom = location.hash.replace('#', '').trim();
+const _savedRoom = localStorage.getItem('tac-board-room');
+if (_hashRoom) {
+  roomInput.value = _hashRoom;
+} else if (_savedRoom) {
+  roomInput.value = _savedRoom;
+}
+
+// ── Active Room Picker ────────────────────────────────────────
+async function fetchActiveRooms() {
+  try {
+    const res = await fetch('/api/rooms');
+    const rooms = await res.json();
+    const container = document.getElementById('active-rooms');
+    const list = document.getElementById('active-rooms-list');
+    if (!rooms.length) {
+      container.classList.add('hidden');
+      return;
+    }
+    container.classList.remove('hidden');
+    list.innerHTML = '';
+    rooms.forEach(r => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'room-chip';
+      if (roomInput.value === r.id) chip.classList.add('selected');
+      chip.innerHTML = `${r.id} <span class="room-chip-count">${r.users} online</span>`;
+      chip.addEventListener('click', () => {
+        roomInput.value = r.id;
+        list.querySelectorAll('.room-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+      });
+      list.appendChild(chip);
+    });
+  } catch { /* silently ignore — room list is optional UX */ }
+}
+
+fetchActiveRooms();
+// Refresh room list every 10 seconds while on join screen
+const _roomRefresh = setInterval(() => {
+  if (!joinScreen.classList.contains('hidden')) fetchActiveRooms();
+  else clearInterval(_roomRefresh);
+}, 10000);
+
 function doJoin() {
   const name = usernameInput.value.trim();
   if (!name) { usernameInput.focus(); return; }
   myName = name;
+  myRoom = (roomInput.value.trim() || 'lobby').replace(/[^a-zA-Z0-9_-]/g, '-');
   localStorage.setItem('tac-board-username', name);
+  localStorage.setItem('tac-board-room', myRoom);
+  location.hash = myRoom;
   joinScreen.classList.add('hidden');
   appEl.classList.remove('hidden');
   resizeCanvases();
@@ -1625,7 +1784,17 @@ function doJoin() {
 }
 
 joinBtn.addEventListener('click', doJoin);
-usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { roomInput.focus(); e.preventDefault(); } });
+roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+// ── Mobile toolbar toggle ───────────────────────────────────────
+const mobileToggle = document.getElementById('mobile-toolbar-toggle');
+const toolbar = document.getElementById('toolbar');
+
+mobileToggle?.addEventListener('click', () => {
+  toolbar.classList.toggle('mobile-open');
+  mobileToggle.textContent = toolbar.classList.contains('mobile-open') ? '✕' : '☰';
+});
 
 // ── Modal / Popup handling ────────────────────────────────────
 const recordingsModal = document.getElementById('recordings-modal');

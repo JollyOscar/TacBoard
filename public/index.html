@@ -14,13 +14,21 @@
       <div class="join-logo">⚽ Tac Board</div>
       <h2>Enter your name to join</h2>
       <input id="username-input" type="text" placeholder="Your name…" maxlength="20" autofocus />
+      <input id="room-input" type="text" placeholder="New room name or pick below…" maxlength="40" />
+      <div id="active-rooms" class="active-rooms hidden">
+        <label class="active-rooms-label">Active Rooms</label>
+        <div id="active-rooms-list" class="active-rooms-list"></div>
+      </div>
       <button id="join-btn">Join Board</button>
-      <p class="join-hint">Share the URL with teammates to collaborate in real-time.</p>
+      <p class="join-hint">Share the URL with teammates to collaborate in real-time.<br>Pick an active room or type a new name to create one.</p>
     </div>
   </div>
 
   <!-- ── Main app ────────────────────────────────────────── -->
   <div id="app" class="hidden">
+
+    <!-- Mobile toolbar toggle -->
+    <button id="mobile-toolbar-toggle" class="mobile-toolbar-toggle" title="Toggle toolbar">☰</button>
 
     <!-- Sidebar toolbar -->
     <aside id="toolbar">
@@ -28,6 +36,7 @@
         <button class="tool-btn active" id="tool-draw"    title="Draw (D)">✏️</button>
         <button class="tool-btn"        id="tool-arrow"   title="Arrow (A)">➡️</button>
         <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
+        <button class="tool-btn"        id="tool-ping"    title="Ping / Attention (P)">🎯</button>
         <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
         <button class="tool-btn"        id="tool-undo"    title="Undo your last action (Ctrl+Z)">↩️</button>
         <label class="own-erase-label" title="Dashed arrows">
@@ -109,6 +118,9 @@
     <!-- Board area -->
     <main id="board-wrap">
 
+      <!-- Room badge -->
+      <div id="room-badge" title="Current room">🏠 lobby</div>
+
       <!-- Replay overlay bar -->
       <div id="replay-bar" class="hidden">
         <span id="replay-label">▶ Replay</span>
@@ -162,6 +174,11 @@
       </div>
       <div class="modal-body">
         <button id="save-preset-btn" class="action-btn save-preset-modal-btn" title="Save current board state">💾 Save New Preset</button>
+        <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <button id="export-board-btn" class="action-btn" title="Download board as a file">⬇️ Export to File</button>
+          <button id="import-board-btn" class="action-btn" title="Load board from a file">⬆️ Import from File</button>
+        </div>
+        <input type="file" id="import-file" accept=".json,.tacboard" class="hidden" />
         <ul id="presets-list" class="presets-list">
           <li class="no-presets">No presets saved</li>
         </ul>

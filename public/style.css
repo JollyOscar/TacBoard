@@ -411,6 +411,42 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 }
 .token:hover .token-delete { display: flex; }
 
+.token.pop-in {
+  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pop-in {
+  0% { transform: translate(-50%, -50%) scale(0); }
+  80% { transform: translate(-50%, -50%) scale(1.15); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ── Ping Animation ────────────────────────────────────────── */
+.ping-blip {
+  position: absolute;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  transform: translate(-50%, -50%) scale(0.1);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 10000;
+  animation: ping-expand 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes ping-expand {
+  0% {
+    transform: translate(-50%, -50%) scale(0.1);
+    opacity: 1;
+    border-width: 8px;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.5);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
 /* ── Token rename input ────────────────────────────────────── */
 .token-rename-input {
   position: absolute;
@@ -586,5 +622,203 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   padding: 12px;
   font-size: 0.9rem;
   margin-bottom: 8px;
+}
+
+/* ── Room Input ─────────────────────────────────────────────── */
+#room-input {
+  width: 100%; padding: 10px 16px;
+  background: var(--sidebar-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text-muted); font-size: .85rem;
+  outline: none; margin-bottom: 8px;
+  transition: border-color .2s;
+}
+#room-input:focus { border-color: var(--accent); color: var(--text); }
+
+/* ── Active Room Picker ────────────────────────────────────── */
+.active-rooms {
+  width: 100%;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.active-rooms-label {
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.active-rooms-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text);
+  font-size: .78rem;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.room-chip:hover {
+  background: var(--accent2);
+  border-color: var(--accent2);
+  transform: scale(1.03);
+}
+.room-chip.selected {
+  background: var(--accent2);
+  border-color: var(--accent2);
+}
+.room-chip-count {
+  background: rgba(255,255,255,.15);
+  padding: 1px 7px;
+  border-radius: 12px;
+  font-size: .65rem;
+  color: rgba(255,255,255,.8);
+}
+
+/* ── Room Badge ─────────────────────────────────────────────── */
+#room-badge {
+  position: absolute;
+  top: 10px; left: 10px;
+  background: rgba(14, 18, 30, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: .72rem;
+  color: var(--text-muted);
+  z-index: 50;
+  pointer-events: none;
+  letter-spacing: .03em;
+}
+
+/* ── Mobile Toolbar Toggle ──────────────────────────────────── */
+.mobile-toolbar-toggle {
+  display: none; /* Hidden on desktop */
+  position: fixed;
+  bottom: 16px; right: 16px;
+  z-index: 9999;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  transition: background .2s, transform .1s;
+}
+.mobile-toolbar-toggle:active { transform: scale(.9); }
+
+/* ── Mobile Responsive Layout ───────────────────────────────── */
+@media (max-width: 768px) {
+  #app {
+    flex-direction: column;
+  }
+
+  /* Hide user panel by default on mobile */
+  #user-panel {
+    display: none;
+  }
+
+  /* Toolbar collapses to bottom bar */
+  #toolbar {
+    width: 100%;
+    height: auto;
+    max-height: 0;
+    overflow: hidden;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 0;
+    order: 2; /* push below board */
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  #toolbar.mobile-open {
+    max-height: 500px;
+    padding: 10px 8px;
+    overflow-y: auto;
+  }
+
+  /* Board takes full space */
+  #board-wrap {
+    flex: 1;
+    order: 1;
+    min-height: 0;
+  }
+
+  /* Show mobile toggle */
+  .mobile-toolbar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Adjust tool grid for mobile */
+  .tools-grid {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tool-btn {
+    width: 44px; height: 44px;
+    font-size: 1.2rem;
+  }
+
+  .tool-group { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  .tool-divider { display: none; }
+
+  .color-section .color-grid { flex-wrap: wrap; }
+
+  .action-btn { font-size: .65rem; padding: 6px 4px; }
+
+  /* Labels */
+  .tool-label { display: none; }
+  .size-section { width: 120px; }
+  #size-picker { width: 100%; }
+
+  .own-erase-label { font-size: .6rem; padding: 4px 6px; }
+
+  /* Token palette compact */
+  #token-palette { gap: 3px; }
+  .token-swatch { width: 26px; height: 26px; font-size: .65rem; }
+
+  /* Modals go full-width on mobile */
+  .modal-content {
+    width: 96%;
+    max-width: none;
+    max-height: 90vh;
+    border-radius: 8px;
+  }
+
+  .modal-header { padding: 14px 16px; }
+  .modal-header h2 { font-size: 1.1rem; }
+  .modal-body { padding: 14px; }
+
+  /* Room badge adjust */
+  #room-badge {
+    top: 6px; left: 6px;
+    font-size: .65rem;
+    padding: 3px 8px;
+  }
+
+  /* Join screen responsive */
+  .join-card {
+    width: 92%;
+    max-width: 360px;
+    padding: 32px 24px;
+  }
 }
 
