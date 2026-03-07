@@ -214,11 +214,53 @@ function arc(ctx, cx, cy, r, startA, endA, anti) {
 // ── Stored strokes ────────────────────────────────────────────
 const allStrokes = [];
 const allArrows  = [];
+const laserStrokes = [];
 
 function redrawStrokes() {
   strokesCtx.clearRect(0, 0, strokesCanvas.width, strokesCanvas.height);
   allStrokes.forEach(s => renderStroke(strokesCtx, s));
   allArrows.forEach(a  => renderArrow(strokesCtx, a));
+  
+  // Render fading laser strokes
+  const now = Date.now();
+  laserStrokes.forEach(s => {
+    const age = now - s.timestamp;
+    if (age > 1500) return;
+    const opacity = 1 - (age / 1500);
+    renderLaser(strokesCtx, s, opacity);
+  });
+}
+
+function renderLaser(ctx, stroke, opacity) {
+  if (!stroke.points || stroke.points.length < 2) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+  ctx.lineWidth = toPixelSize(stroke.width) * 0.8;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = stroke.color;
+  ctx.shadowBlur = toPixelSize(stroke.width) * 3;
+  
+  const p0 = toPixel(stroke.points[0].x, stroke.points[0].y);
+  ctx.moveTo(p0.x, p0.y);
+  stroke.points.forEach(p => {
+    const px = toPixel(p.x, p.y);
+    ctx.lineTo(px.x, px.y);
+  });
+  ctx.stroke();
+  
+  // Outer glow
+  ctx.strokeStyle = `rgba(${hexToRgb(stroke.color)}, ${opacity * 0.8})`;
+  ctx.lineWidth = toPixelSize(stroke.width) * 2;
+  ctx.shadowBlur = 0;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '255, 255, 255';
 }
 
 function renderStroke(ctx, stroke) {
@@ -408,13 +450,14 @@ liveCanvas.addEventListener('pointerdown', e => {
   });
 });
 
+let _lastDrawEmit = 0;
 liveCanvas.addEventListener('pointermove', e => {
   const pos = toLogical(e.clientX, e.clientY);
   lastMousePos = pos;
 
-  // Emit cursor (throttled to max ~25/sec)
+  // Emit cursor (throttled to 10fps / 100ms for massive bandwidth savings)
   const now = Date.now();
-  if (now - _lastCursorEmit > 40) {
+  if (now - _lastCursorEmit > 100) {
     socket?.emit('cursor-move', pos);
     _lastCursorEmit = now;
   }
@@ -423,13 +466,15 @@ liveCanvas.addEventListener('pointermove', e => {
 
   currentPath.push(pos);
 
-  // Throttle: emit every other point
-  if (currentPath.length % 2 === 0) {
+  // Batching: only transmit drawing state every 50ms (20fps). 
+  // It completely solves network congestion on fast hardware without losing any structural data on the server.
+  if (now - _lastDrawEmit > 50) {
     socket?.emit('draw-move', {
       tool: activeTool,
       width: +sizePicker.value,
       points: currentPath
     });
+    _lastDrawEmit = now;
   }
   redrawLive();
 });
@@ -438,17 +483,32 @@ liveCanvas.addEventListener('pointerup', e => {
   if (!isDrawing) return;
   isDrawing = false;
 
-  if (activeTool === 'draw' && currentPath.length >= 2) {
+  if ((activeTool === 'draw' || activeTool === 'laser') && currentPath.length >= 2) {
+    const isLaser = activeTool === 'laser';
     const stroke = {
       id: `${myId}-${++strokeSeq}`,
       socketId: myId,
-      tool: 'draw',
+      tool: activeTool,
       points: simplifyPoints([...currentPath], 1.5),
       color: colorPicker.value,
-      width: +sizePicker.value
+      width: +sizePicker.value,
+      timestamp: Date.now()
     };
-    allStrokes.push(stroke);
-    myUndoStack.push({ type: 'stroke', id: stroke.id });
+
+    if (isLaser) {
+      laserStrokes.push(stroke);
+      setTimeout(() => {
+        const idx = laserStrokes.findIndex(s => s.id === stroke.id);
+        if (idx !== -1) {
+          laserStrokes.splice(idx, 1);
+          redrawStrokes();
+        }
+      }, 1500); // laser fades after 1.5s
+    } else {
+      allStrokes.push(stroke);
+      myUndoStack.push({ type: 'stroke', id: stroke.id });
+    }
+    
     socket?.emit('stroke-done', stroke);
     redrawStrokes();
   }
@@ -524,6 +584,9 @@ function createTokenEl(token) {
     el.style.border = 'none';
     el.style.fontSize = '1.6rem';
     el.style.boxShadow = 'none';
+  } else if (token.shape === 'emoji') {
+    el.className = 'token token-emoji';
+    el.textContent = token.label; // The emoji character
   } else {
     el.className = 'token';
     el.textContent = token.label || '1';
@@ -639,17 +702,28 @@ const tokenCounters = {};
 
 document.querySelectorAll('.token-swatch').forEach(btn => {
   btn.addEventListener('click', () => {
-    const color = btn.dataset.color;
+    const isEmoji = btn.classList.contains('token-emoji-btn');
+    const color = btn.dataset.color || '#ffffff';
     const shape = btn.dataset.shape || 'circle';
-    tokenCounters[color] = (tokenCounters[color] || 0) + 1;
-    const label = shape === 'ball' ? '⚽' : String(tokenCounters[color]);
+    const emoji = btn.dataset.emoji;
+    
+    let label = '';
+    if (isEmoji) {
+      label = emoji;
+    } else if (shape === 'ball') {
+      label = '⚽';
+    } else {
+      tokenCounters[color] = (tokenCounters[color] || 0) + 1;
+      label = String(tokenCounters[color]);
+    }
+
     // Place near center
     socket?.emit('token-add', {
       x: PITCH_W / 2 + (Math.random() - .5) * 100,
       y: PITCH_H / 2 + (Math.random() - .5) * 80,
-      color,
+      color: isEmoji ? 'transparent' : color,
       label,
-      shape,
+      shape: isEmoji ? 'emoji' : shape,
       createdBy: myId
     });
   });
@@ -765,7 +839,19 @@ function connectSocket(username) {
 
   // Finished stroke from others
   socket.on('stroke-done', (stroke) => {
-    allStrokes.push(stroke);
+    if (stroke.tool === 'laser') {
+      stroke.timestamp = Date.now();
+      laserStrokes.push(stroke);
+      setTimeout(() => {
+        const idx = laserStrokes.findIndex(s => s.id === stroke.id);
+        if (idx !== -1) {
+          laserStrokes.splice(idx, 1);
+          redrawStrokes();
+        }
+      }, 1500);
+    } else {
+      allStrokes.push(stroke);
+    }
     delete liveStrokes[stroke.socketId];
     redrawStrokes();
   });
@@ -954,6 +1040,7 @@ function setTool(tool) {
 
 document.getElementById('tool-draw').addEventListener('click',   () => setTool('draw'));
 document.getElementById('tool-arrow').addEventListener('click',  () => setTool('arrow'));
+document.getElementById('tool-laser').addEventListener('click',  () => setTool('laser'));
 document.getElementById('tool-erase').addEventListener('click',  () => setTool('erase'));
 document.getElementById('tool-ping').addEventListener('click',   () => setTool('ping'));
 document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
@@ -1285,6 +1372,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'e' || e.key === 'E') setTool('erase');
   if (e.key === 'p' || e.key === 'P') setTool('ping');
   if (e.key === 's' || e.key === 'S') setTool('select');
+  if (e.key === 'l' || e.key === 'L') setTool('laser');
   
   if (e.key >= '1' && e.key <= '8') {
     const presets = Array.from(document.querySelectorAll('.color-preset'));
@@ -1352,6 +1440,11 @@ function drawTokenFrame(ctx, t, w, h) {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('⚽', cx, cy);
+  } else if (t.shape === 'emoji') {
+    ctx.font = `${r * 1.6}px serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t.label, cx, cy);
   } else {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -1364,6 +1457,7 @@ function drawTokenFrame(ctx, t, w, h) {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle    = (t.color === '#ffffff' || t.color === '#fff') ? '#222' : '#fff';
+
     ctx.shadowColor  = 'rgba(0,0,0,0.7)';
     ctx.shadowBlur   = 2;
     ctx.fillText(t.label || '', cx, cy);

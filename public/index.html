@@ -35,6 +35,7 @@
       <div class="tool-group tools-grid">
         <button class="tool-btn active" id="tool-draw"    title="Draw (D)">✏️</button>
         <button class="tool-btn"        id="tool-arrow"   title="Arrow (A)">➡️</button>
+        <button class="tool-btn"        id="tool-laser"   title="Laser Pointer (L)">🪄</button>
         <button class="tool-btn"        id="tool-erase"   title="Eraser (E)">🧹</button>
         <button class="tool-btn"        id="tool-ping"    title="Ping / Attention (P)">🎯</button>
         <button class="tool-btn"        id="tool-select"  title="Select / Move (S)">🖐️</button>
@@ -73,7 +74,14 @@
         </div>
         <div id="tokens-content" class="collapsible-content">
           <div id="token-palette">
-            <button class="token-swatch token-ball-btn" data-color="#fff" data-shape="ball" title="Place soccer ball" style="background:#3a7d2c;font-size:1.1rem;">⚽</button>
+            <!-- Emojis -->
+            <button class="token-swatch token-emoji-btn" data-emoji="⚽" title="Soccer Ball">⚽</button>
+            <button class="token-swatch token-emoji-btn" data-emoji="⛳" title="Flag">⛳</button>
+            <button class="token-swatch token-emoji-btn" data-emoji=" cone" title="Cone" style="font-size: 1.2rem;">🔺</button>
+            <button class="token-swatch token-emoji-btn" data-emoji="❌" title="X Marker">❌</button>
+            <button class="token-swatch token-emoji-btn" data-emoji="⭐" title="Star">⭐</button>
+
+            <!-- Numbers -->
             <button class="token-swatch" data-color="#e74c3c" data-label="1"  style="background:#e74c3c">1</button>
             <button class="token-swatch" data-color="#3498db" data-label="1"  style="background:#3498db">1</button>
             <button class="token-swatch" data-color="#2ecc71" data-label="1"  style="background:#2ecc71">1</button>
