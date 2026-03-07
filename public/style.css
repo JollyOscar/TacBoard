@@ -421,6 +421,31 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   100% { transform: translate(-50%, -50%) scale(1); }
 }
 
+.token-icon {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.token-icon svg {
+  width: 100%; height: 100%; display: block;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+.token-icon:hover { box-shadow: none !important; }
+.token-icon.dragging { box-shadow: none !important; }
+.token-icon.dragging svg { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.7)); }
+
+.token-icon-btn {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+}
+.token-icon-btn:hover {
+  border-color: rgba(255,255,255,0.3) !important;
+}
+.token-icon-btn svg {
+  width: 100%; height: 100%;
+}
+
 /* ── Ping Animation ────────────────────────────────────────── */
 .ping-blip {
   position: absolute;

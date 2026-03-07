@@ -572,21 +572,39 @@ liveCanvas.addEventListener('pointerleave', () => {
   lastMousePos = null;
   redrawLive();
 });
+const ICONS = {
+  ball: `<svg viewBox="0 0 24 24" fill="white" stroke="#222" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="12,6 16,9 14.5,14 9.5,14 8,9" fill="#222"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="16" y1="9" x2="20.5" y2="6.5"/><line x1="14.5" y1="14" x2="18" y2="20"/><line x1="9.5" y1="14" x2="6" y2="20"/><line x1="8" y1="9" x2="3.5" y2="6.5"/></svg>`,
+  flag: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22v-7" stroke="#222"/><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1v12z" fill="#e74c3c" stroke="#c0392b"/></svg>`,
+  cone: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 18H4z" fill="#e67e22" stroke="#d35400"/><path d="M9.5 8h5 M8 13h8" stroke="white" stroke-width="3"/></svg>`,
+  x: `<svg viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  star: `<svg viewBox="0 0 24 24" fill="#f1c40f" stroke="#f39c12" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`
+};
+const iconImages = {};
+Object.entries(ICONS).forEach(([name, svgTxt]) => {
+  const img = new Image();
+  const blob = new Blob([svgTxt], { type: 'image/svg+xml' });
+  img.src = URL.createObjectURL(blob);
+  iconImages[name] = img;
+});
 
 // ── Tokens ────────────────────────────────────────────────────
+
 function createTokenEl(token) {
   const el = document.createElement('div');
   el.id = 'token-' + token.id;
-  if (token.shape === 'ball') {
-    el.className = 'token token-ball';
-    el.textContent = '⚽';
+  if (token.shape === 'icon' || token.shape === 'ball') {
+    el.className = 'token token-icon';
+    const iconName = token.shape === 'ball' ? 'ball' : token.label;
+    el.innerHTML = ICONS[iconName] || ICONS.ball;
     el.style.background = 'transparent';
     el.style.border = 'none';
-    el.style.fontSize = '1.6rem';
     el.style.boxShadow = 'none';
   } else if (token.shape === 'emoji') {
     el.className = 'token token-emoji';
     el.textContent = token.label; // The emoji character
+    el.style.background = 'transparent';
+    el.style.border = 'none';
+    el.style.boxShadow = 'none';
   } else {
     el.className = 'token';
     el.textContent = token.label || '1';
@@ -609,8 +627,8 @@ function createTokenEl(token) {
   });
   el.appendChild(del);
 
-  // Double-click to rename (not for ball)
-  if (token.shape !== 'ball') {
+  // Double-click to rename (not for icons or balls)
+  if (token.shape !== 'ball' && token.shape !== 'icon') {
     el.addEventListener('dblclick', e => {
       e.stopPropagation();
       const input = document.createElement('input');
@@ -702,14 +720,18 @@ const tokenCounters = {};
 
 document.querySelectorAll('.token-swatch').forEach(btn => {
   btn.addEventListener('click', () => {
+    const isIcon = btn.classList.contains('token-icon-btn');
     const isEmoji = btn.classList.contains('token-emoji-btn');
     const color = btn.dataset.color || '#ffffff';
-    const shape = btn.dataset.shape || 'circle';
-    const emoji = btn.dataset.emoji;
+    let shape = btn.dataset.shape || 'circle';
     
     let label = '';
-    if (isEmoji) {
-      label = emoji;
+    if (isIcon) {
+      shape = 'icon';
+      label = btn.dataset.icon;
+    } else if (isEmoji) {
+      shape = 'emoji';
+      label = btn.dataset.emoji;
     } else if (shape === 'ball') {
       label = '⚽';
     } else {
@@ -721,9 +743,9 @@ document.querySelectorAll('.token-swatch').forEach(btn => {
     socket?.emit('token-add', {
       x: PITCH_W / 2 + (Math.random() - .5) * 100,
       y: PITCH_H / 2 + (Math.random() - .5) * 80,
-      color: isEmoji ? 'transparent' : color,
+      color: (isIcon || isEmoji) ? 'transparent' : color,
       label,
-      shape: isEmoji ? 'emoji' : shape,
+      shape,
       createdBy: myId
     });
   });
@@ -1435,11 +1457,15 @@ function drawTokenFrame(ctx, t, w, h) {
   const r  = 18 * (w / pitchCanvas.width); // match 36px CSS token radius
 
   ctx.save();
-  if (t.shape === 'ball') {
-    ctx.font = `${r * 1.6}px serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('⚽', cx, cy);
+  if (t.shape === 'icon' || t.shape === 'ball') {
+    const iconName = t.shape === 'ball' ? 'ball' : t.label;
+    const img = iconImages[iconName];
+    if (img) {
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+      ctx.drawImage(img, cx - r, cy - r, r*2, r*2);
+    }
   } else if (t.shape === 'emoji') {
     ctx.font = `${r * 1.6}px serif`;
     ctx.textAlign    = 'center';
