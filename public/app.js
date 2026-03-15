@@ -839,7 +839,7 @@ function connectSocket(username) {
     socket.emit('join', { username, room: myRoom });
   });
 
-  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you, room }) => {
+  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you, room, recActive, repActive, repDuration, repPosition, repPaused }) => {
     myColor = you.color;
     colorPicker.value = myColor;
 
@@ -848,6 +848,34 @@ function connectSocket(username) {
       myRoom = room;
       const badge = document.getElementById('room-badge');
       if (badge) badge.textContent = '🏠 ' + room;
+    }
+
+    _recActive = !!recActive;
+    if (_recActive) {
+      const recBtn = document.getElementById('record-btn');
+      recBtn.textContent = '⏹ Stop Rec';
+      recBtn.classList.add('recording');
+      updateReplayButton();
+    } else {
+      const recBtn = document.getElementById('record-btn');
+      recBtn.textContent = '⏺ Record';
+      recBtn.classList.remove('recording');
+      updateReplayButton();
+    }
+
+    if (repActive) {
+      isReplaying = true;
+      isReplayPaused = !!repPaused;
+      _replayDuration = repDuration;
+      _replayPlaybackPosition = repPosition;
+      _replayLastTick = Date.now();
+      liveCanvas.style.pointerEvents = 'none';
+      document.getElementById('replay-bar').classList.remove('hidden');
+      document.getElementById('replay-playpause-btn').textContent = isReplayPaused ? '▶' : '⏸';
+      updateReplayButton();
+      tickReplayBar();
+    } else {
+      endReplay(); // Clean up just in case
     }
 
     // Re-render strokes
@@ -1494,6 +1522,7 @@ let _replayPlaybackPosition = 0;
 let _replayRafId    = null;
 let isReplayPaused  = false;
 let isSeeking       = false;
+let _selectedRecId  = null;
 
 // Video recording (MP4 capture during replay)
 let _videoRecorder     = null;
@@ -1763,104 +1792,109 @@ function updateReplayButton() {
 }
 
 function renderRecordingsList() {
-  const list = document.getElementById('recordings-list');
-  if (!_recordings.length) {
-    list.innerHTML = '<li class="no-recordings">No recordings yet</li>';
-    _selectedRecId = null;
-    updateReplayButton();
-    return;
-  }
-  list.innerHTML = '';
-  _recordings.forEach(rec => {
-    const li = document.createElement('li');
-    li.className = 'recording-item' + (rec.id === _selectedRecId ? ' selected' : '');
-    const time = new Date(rec.timestamp).toLocaleTimeString();
-    const dur = (rec.duration / 1000).toFixed(1);
-    li.innerHTML = `
-      <div class="rec-info" data-id="${rec.id}">
-        <div class="rec-time">${escHtml(rec.name)}</div>
-        <div class="rec-meta">${time} · ${dur}s · ${rec.eventCount} events</div>
-      </div>
-      <div class="rec-actions">
-        <button class="rec-play" data-id="${rec.id}" title="Play recording">▶</button>
-        <button class="rec-rename" data-id="${rec.id}" title="Rename">✏️</button>
-        <button class="rec-download" data-id="${rec.id}" title="Download as MP4">📽️</button>
-        <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
-      </div>
-    `;
-    list.appendChild(li);
-  });
-
-  // Select handlers
-  list.querySelectorAll('.rec-info').forEach(el => {
-    el.addEventListener('click', () => {
-      _selectedRecId = +el.dataset.id;
-      renderRecordingsList();
+  try {
+    const list = document.getElementById('recordings-list');
+    if (!_recordings || !_recordings.length) {
+      list.innerHTML = '<li class="no-recordings">No recordings yet</li>';
+      _selectedRecId = null;
       updateReplayButton();
+      return;
+    }
+    list.innerHTML = '';
+    _recordings.forEach(rec => {
+      const li = document.createElement('li');
+      li.className = 'recording-item' + (rec.id === _selectedRecId ? ' selected' : '');
+      const time = new Date(rec.timestamp).toLocaleTimeString();
+      const dur = (rec.duration / 1000).toFixed(1);
+      li.innerHTML = `
+        <div class="rec-info" data-id="${rec.id}">
+          <div class="rec-time">${escHtml(rec.name)}</div>
+          <div class="rec-meta">${time} · ${dur}s · ${rec.eventCount} events</div>
+        </div>
+        <div class="rec-actions">
+          <button class="rec-play" data-id="${rec.id}" title="Play recording">▶</button>
+          <button class="rec-rename" data-id="${rec.id}" title="Rename">✏️</button>
+          <button class="rec-download" data-id="${rec.id}" title="Download as MP4">📽️</button>
+          <button class="rec-delete" data-id="${rec.id}" title="Delete">×</button>
+        </div>
+      `;
+      list.appendChild(li);
     });
-  });
 
-  // Play handlers
-  list.querySelectorAll('.rec-play').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const recId = +btn.dataset.id;
-      if (isReplaying || _recActive || !socket) return;
-      socket.emit('replay-start', { recId });
-      closeModal(recordingsModal);
-    });
-  });
-
-  // Rename handlers — inline rename
-  list.querySelectorAll('.rec-rename').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const recording = _recordings.find(r => r.id === +btn.dataset.id);
-      if (!recording) return;
-      const li = btn.closest('.recording-item');
-      const nameEl = li.querySelector('.rec-time');
-      if (nameEl.querySelector('input')) return; // already editing
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'inline-rename-input';
-      input.value = recording.name;
-      input.maxLength = 80;
-      nameEl.textContent = '';
-      nameEl.appendChild(input);
-      input.focus(); input.select();
-      let cancelled = false;
-      const commit = () => {
-        if (cancelled) return;
-        const newName = input.value.trim();
-        if (newName && newName !== recording.name) {
-          socket?.emit('rename-recording', { recId: recording.id, newName });
-        }
-        nameEl.textContent = newName || recording.name;
-      };
-      input.addEventListener('blur', commit);
-      input.addEventListener('keydown', ev => {
-        if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
-        if (ev.key === 'Escape') { cancelled = true; nameEl.textContent = recording.name; input.remove(); }
+    // Select handlers
+    list.querySelectorAll('.rec-info').forEach(el => {
+      el.addEventListener('click', () => {
+        _selectedRecId = +el.dataset.id;
+        renderRecordingsList();
+        updateReplayButton();
       });
     });
-  });
 
-  // Delete handlers
-  list.querySelectorAll('.rec-delete').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      socket?.emit('delete-recording', { recId: +btn.dataset.id });
+    // Play handlers
+    list.querySelectorAll('.rec-play').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const recId = +btn.dataset.id;
+        if (isReplaying || _recActive || !socket) return;
+        socket.emit('replay-start', { recId });
+        closeModal(document.getElementById('recordings-modal'));
+      });
     });
-  });
-  
-  // Download handlers
-  list.querySelectorAll('.rec-download').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const recId = +btn.dataset.id;
-      downloadRecordingAsMP4(recId);
+
+    // Rename handlers — inline rename
+    list.querySelectorAll('.rec-rename').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const recording = _recordings.find(r => r.id === +btn.dataset.id);
+        if (!recording) return;
+        const li = btn.closest('.recording-item');
+        const nameEl = li.querySelector('.rec-time');
+        if (nameEl.querySelector('input')) return; // already editing
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'inline-rename-input';
+        input.value = recording.name;
+        input.maxLength = 80;
+        nameEl.textContent = '';
+        nameEl.appendChild(input);
+        input.focus(); input.select();
+        let cancelled = false;
+        const commit = () => {
+          if (cancelled) return;
+          const newName = input.value.trim();
+          if (newName && newName !== recording.name) {
+            socket?.emit('rename-recording', { recId: recording.id, newName });
+          }
+          nameEl.textContent = newName || recording.name;
+        };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', ev => {
+          if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+          if (ev.key === 'Escape') { cancelled = true; nameEl.textContent = recording.name; input.remove(); }
+        });
+      });
     });
-  });
+
+    // Delete handlers
+    list.querySelectorAll('.rec-delete').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        socket?.emit('delete-recording', { recId: +btn.dataset.id });
+      });
+    });
+    
+    // Download handlers
+    list.querySelectorAll('.rec-download').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const recId = +btn.dataset.id;
+        downloadRecordingAsMP4(recId);
+      });
+    });
+  } catch (e) {
+    toast(`[ERROR] renderRecordingsList: ${e.message}`);
+    console.error(e);
+  }
 }
 
 function tickReplayBar() {

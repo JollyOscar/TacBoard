@@ -313,6 +313,7 @@ function getBoardPresetsList() {
 }
 
 function getRecordingsList() {
+  console.log(`[DEBUG] getRecordingsList called. recordings.length = ${recordings.length}`);
   return recordings.map(r => ({
     id: r.id,
     name: r.name,
@@ -443,7 +444,12 @@ io.on('connection', (socket) => {
       arrows: room.arrows,
       users: Object.values(room.users),
       you: room.users[socket.id],
-      room: roomId
+      room: roomId,
+      recActive: room.rec.active,
+      repActive: room.rep.active,
+      repDuration: room.rep.currentRecId ? (recordings.find(r => r.id === room.rep.currentRecId)?.duration || 0) : 0,
+      repPosition: room.rep.playbackPosition,
+      repPaused: !room.rep.isPlaying
     });
 
     // Proactively push lists so client doesn't need to request them
