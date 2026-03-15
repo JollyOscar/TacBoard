@@ -110,7 +110,7 @@ function getRoom(roomId) {
       nextArrowId: 1,
       colorIndex: 0,
       rec: { active: false, start: 0, snapshot: null, timeline: [] },
-      rep: { active: false, timers: [], preSnap: null, currentRecId: null }
+      rep: { active: false, interval: null, preSnap: null, currentRecId: null, isPlaying: false, playbackPosition: 0, lastTick: 0 }
     };
     console.log(`[+] Room "${roomId}" created`);
   }
@@ -338,10 +338,12 @@ function snapState(room) {
 
 function finishReplay(roomId) {
   const room = getRoom(roomId);
-  room.rep.timers.forEach(clearTimeout);
-  room.rep.timers = [];
+  if (room.rep.interval) clearInterval(room.rep.interval);
+  room.rep.interval = null;
   room.rep.active = false;
+  room.rep.isPlaying = false;
   room.rep.currentRecId = null;
+  room.rep.playbackPosition = 0;
   const s = room.rep.preSnap;
   room.strokes = s.strokes;
   room.arrows  = s.arrows;
@@ -675,6 +677,9 @@ io.on('connection', (socket) => {
     room.arrows  = JSON.parse(JSON.stringify(recording.snapshot.arrows));
     room.tokens  = JSON.parse(JSON.stringify(recording.snapshot.tokens));
 
+    room.rep.isPlaying = true;
+    room.rep.playbackPosition = 0;
+
     io.to(roomId).emit('clear-board');
     io.to(roomId).emit('tokens-cleared');
     io.to(roomId).emit('replay-started', { duration: recording.duration, recId });
@@ -684,15 +689,27 @@ io.on('connection', (socket) => {
         arrows:  recording.snapshot.arrows,
         tokens:  Object.values(recording.snapshot.tokens)
       });
-    }, 150);
+      room.rep.lastTick = Date.now();
+      room.rep.interval = setInterval(() => {
+        if (!room.rep.isPlaying) return;
+        const now = Date.now();
+        const delta = now - room.rep.lastTick;
+        room.rep.lastTick = now;
 
-    room.rep.timers = [];
-    recording.timeline.forEach(entry => {
-      const tid = setTimeout(() => io.to(roomId).emit(entry.event, entry.data), entry.t + 350);
-      room.rep.timers.push(tid);
-    });
-    const endTid = setTimeout(() => finishReplay(roomId), recording.duration + 900);
-    room.rep.timers.push(endTid);
+        const prevPos = room.rep.playbackPosition;
+        room.rep.playbackPosition += delta;
+
+        recording.timeline.forEach(entry => {
+          if (entry.t > prevPos && entry.t <= room.rep.playbackPosition) {
+            io.to(roomId).emit(entry.event, entry.data);
+          }
+        });
+
+        if (room.rep.playbackPosition >= recording.duration + 500) {
+          finishReplay(roomId);
+        }
+      }, 50);
+    }, 150);
   });
 
   socket.on('replay-stop', () => {
@@ -700,6 +717,91 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     const room = getRoom(roomId);
     if (room.rep.active) finishReplay(roomId);
+  });
+
+  socket.on('replay-pause', () => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (!room.rep.active || !room.rep.isPlaying) return;
+    room.rep.isPlaying = false;
+    io.to(roomId).emit('replay-paused');
+  });
+
+  socket.on('replay-resume', () => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (!room.rep.active || room.rep.isPlaying) return;
+    room.rep.isPlaying = true;
+    room.rep.lastTick = Date.now();
+    io.to(roomId).emit('replay-resumed');
+  });
+
+  socket.on('replay-seek', ({ position }) => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = getRoom(roomId);
+    if (!room.rep.active) return;
+    const recording = recordings.find(r => r.id === room.rep.currentRecId);
+    if (!recording) return;
+
+    room.rep.playbackPosition = position;
+    if (room.rep.isPlaying) room.rep.lastTick = Date.now();
+
+    // Recalculate board state up to position
+    const simStrokes = JSON.parse(JSON.stringify(recording.snapshot.strokes || []));
+    const simArrows  = JSON.parse(JSON.stringify(recording.snapshot.arrows || []));
+    const simTokens  = JSON.parse(JSON.stringify(recording.snapshot.tokens || {}));
+
+    recording.timeline.forEach(entry => {
+      if (entry.t <= position) {
+        if (entry.event === 'stroke-done') {
+          simStrokes.push(entry.data);
+        } else if (entry.event === 'stroke-remove') {
+          entry.data.ids.forEach(id => {
+            const idx = simStrokes.findIndex(s => s.id === id);
+            if (idx !== -1) simStrokes.splice(idx, 1);
+          });
+        } else if (entry.event === 'arrow-done') {
+          simArrows.push(entry.data);
+        } else if (entry.event === 'arrow-remove') {
+          entry.data.ids.forEach(id => {
+            const idx = simArrows.findIndex(a => a.id === id);
+            if (idx !== -1) simArrows.splice(idx, 1);
+          });
+        } else if (entry.event === 'token-add') {
+          simTokens[entry.data.id] = entry.data;
+        } else if (entry.event === 'token-move') {
+          if (simTokens[entry.data.id]) {
+            simTokens[entry.data.id].x = entry.data.x;
+            simTokens[entry.data.id].y = entry.data.y;
+          }
+        } else if (entry.event === 'token-remove') {
+          delete simTokens[entry.data.id];
+        } else if (entry.event === 'token-relabel') {
+          if (simTokens[entry.data.id]) {
+            simTokens[entry.data.id].label = entry.data.label;
+          }
+        } else if (entry.event === 'clear-board') {
+          simStrokes.length = 0;
+          simArrows.length = 0;
+        } else if (entry.event === 'tokens-cleared') {
+          for (let k in simTokens) delete simTokens[k];
+        }
+      }
+    });
+
+    room.strokes = simStrokes;
+    room.arrows = simArrows;
+    room.tokens = simTokens;
+
+    io.to(roomId).emit('replay-sync-state', {
+      position,
+      strokes: simStrokes,
+      arrows: simArrows,
+      tokens: Object.values(simTokens)
+    });
   });
 
   socket.on('get-recordings', () => {

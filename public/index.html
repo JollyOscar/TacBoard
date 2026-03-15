@@ -152,7 +152,10 @@
       <!-- Replay overlay bar -->
       <div id="replay-bar" class="hidden">
         <span id="replay-label">▶ Replay</span>
-        <div id="replay-progress-wrap"><div id="replay-progress"></div></div>
+        <button id="replay-playpause-btn" title="Pause">⏸</button>
+        <div id="replay-progress-wrap">
+          <input type="range" id="replay-slider" min="0" max="100" value="0" step="0.1" />
+        </div>
         <span id="replay-time"></span>
         <button id="replay-stop-btn">⏹ Stop</button>
       </div>

@@ -340,12 +340,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
 }
 #replay-label { font-size: .75rem; color: var(--accent); font-weight: 600; letter-spacing: .04em; }
-#replay-progress-wrap {
-  width: 150px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden;
+#replay-playpause-btn {
+  background: none; border: none; color: var(--accent);
+  font-size: 1.1rem; cursor: pointer; padding: 0 4px; border-radius: 4px;
 }
-#replay-progress {
-  height: 100%; width: 0%; background: var(--accent); border-radius: 3px;
-  transition: width 0.15s linear;
+#replay-playpause-btn:hover { background: rgba(255,255,255,0.1); }
+#replay-progress-wrap {
+  width: 200px; display: flex; align-items: center; justify-content: center;
+}
+#replay-slider {
+  width: 100%; cursor: pointer; accent-color: var(--accent);
 }
 #replay-time { font-size: .72rem; color: var(--text-muted); min-width: 36px; }
 #replay-stop-btn {

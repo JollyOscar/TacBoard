@@ -1045,10 +1045,14 @@ function connectSocket(username) {
 
   socket.on('replay-started', ({ duration }) => {
     isReplaying     = true;
+    isReplayPaused  = false;
     _replayDuration = duration;
-    _replayStartMs  = Date.now();
+    _replayPlaybackPosition = 0;
+    _replayLastTick = Date.now();
     liveCanvas.style.pointerEvents = 'none';
     document.getElementById('replay-bar').classList.remove('hidden');
+    document.getElementById('replay-slider').value = 0;
+    document.getElementById('replay-playpause-btn').textContent = '⏸';
     updateReplayButton();
     tickReplayBar();
     toast('▶ Replaying for everyone…');
@@ -1056,6 +1060,30 @@ function connectSocket(username) {
 
   socket.on('replay-done',    endReplay);
   socket.on('replay-stopped', endReplay);
+
+  socket.on('replay-paused', () => {
+    isReplayPaused = true;
+    document.getElementById('replay-playpause-btn').textContent = '▶';
+  });
+
+  socket.on('replay-resumed', () => {
+    isReplayPaused = false;
+    _replayLastTick = Date.now();
+    document.getElementById('replay-playpause-btn').textContent = '⏸';
+  });
+
+  socket.on('replay-sync-state', ({ position, strokes, arrows, tokens: tokenList }) => {
+    _replayPlaybackPosition = position;
+    if (!isReplayPaused) _replayLastTick = Date.now();
+    
+    allStrokes.length = 0; allArrows.length = 0;
+    strokes.forEach(s => allStrokes.push(s));
+    arrows.forEach(a  => allArrows.push(a));
+    redrawStrokes();
+    tokenLayer.innerHTML = '';
+    Object.keys(tokens).forEach(k => delete tokens[k]);
+    tokenList.forEach(t => { tokens[t.id] = t; tokenLayer.appendChild(createTokenEl(t)); });
+  });
 
   // ── Board Presets socket events ───────────────────────────────────────
   socket.on('presets-list', (presets) => {
@@ -1461,8 +1489,11 @@ function renderPing(lx, ly, color) {
 // ── Recording / Replay ───────────────────────────────────────
 let _recActive      = false;  // true while server-side recording is active
 let _replayDuration = 0;      // ms duration of the last recording
-let _replayStartMs  = 0;
+let _replayLastTick = 0;
+let _replayPlaybackPosition = 0;
 let _replayRafId    = null;
+let isReplayPaused  = false;
+let isSeeking       = false;
 
 // Video recording (MP4 capture during replay)
 let _videoRecorder     = null;
@@ -1540,7 +1571,7 @@ function endReplay() {
   liveCanvas.style.pointerEvents = '';
   cancelAnimationFrame(_replayRafId);
   document.getElementById('replay-bar').classList.add('hidden');
-  document.getElementById('replay-progress').style.width = '0%';
+  document.getElementById('replay-slider').value = 0;
   document.getElementById('replay-time').textContent    = '';
   updateReplayButton();
   toast('⏹ Replay ended — board restored');
@@ -1834,10 +1865,19 @@ function renderRecordingsList() {
 
 function tickReplayBar() {
   if (!isReplaying) return;
-  const elapsed = Date.now() - _replayStartMs;
-  const pct = _replayDuration > 0 ? Math.min(100, (elapsed / _replayDuration) * 100) : 0;
-  document.getElementById('replay-progress').style.width = pct + '%';
-  const remaining = Math.max(0, (_replayDuration - elapsed) / 1000);
+  
+  if (!isReplayPaused && !isSeeking) {
+    const now = Date.now();
+    _replayPlaybackPosition += (now - _replayLastTick);
+    _replayLastTick = now;
+  }
+  
+  if (!isSeeking && _replayDuration > 0) {
+    const pct = Math.min(100, (_replayPlaybackPosition / _replayDuration) * 100);
+    document.getElementById('replay-slider').value = pct;
+  }
+  
+  const remaining = Math.max(0, (_replayDuration - _replayPlaybackPosition) / 1000);
   document.getElementById('replay-time').textContent = remaining.toFixed(1) + 's';
   _replayRafId = requestAnimationFrame(tickReplayBar);
 }
@@ -1859,6 +1899,34 @@ document.getElementById('replay-btn').addEventListener('click', () => {
 document.getElementById('replay-stop-btn').addEventListener('click', () => {
   if (!isReplaying || !socket) return;
   socket.emit('replay-stop');
+});
+
+document.getElementById('replay-playpause-btn').addEventListener('click', () => {
+  if (!isReplaying || !socket) return;
+  if (isReplayPaused) {
+    socket.emit('replay-resume');
+  } else {
+    socket.emit('replay-pause');
+  }
+});
+
+const replaySlider = document.getElementById('replay-slider');
+replaySlider.addEventListener('pointerdown', () => {
+  if (!isReplaying || !socket) return;
+  isSeeking = true;
+});
+replaySlider.addEventListener('input', () => {
+  if (!isReplaying) return;
+  const pos = (parseFloat(replaySlider.value) / 100) * _replayDuration;
+  _replayPlaybackPosition = pos;
+  const remaining = Math.max(0, (_replayDuration - _replayPlaybackPosition) / 1000);
+  document.getElementById('replay-time').textContent = remaining.toFixed(1) + 's';
+});
+replaySlider.addEventListener('change', () => {
+  if (!isReplaying || !socket) return;
+  isSeeking = false;
+  const pos = (parseFloat(replaySlider.value) / 100) * _replayDuration;
+  socket.emit('replay-seek', { position: pos });
 });
 
 // ── Screenshot ───────────────────────────────────────────────
