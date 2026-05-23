@@ -301,6 +301,98 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   color: var(--text-muted); font-style: italic;
 }
 
+/* Playbooks list */
+.playbooks-list,
+.playbook-steps-list {
+  list-style: none; width: 100%; max-height: 260px; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px; margin-top: 4px;
+}
+.playbooks-list::-webkit-scrollbar,
+.playbook-steps-list::-webkit-scrollbar { width: 6px; }
+.playbooks-list::-webkit-scrollbar-thumb,
+.playbook-steps-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.playbook-item,
+.playbook-step-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 4px; margin: 3px 0;
+  cursor: pointer; transition: background .1s;
+  border: 1px solid transparent;
+  min-height: 48px;
+}
+.playbook-item:hover,
+.playbook-step-item:hover { background: var(--card-bg); }
+.playbook-item.selected { background: var(--accent2); }
+
+.playbook-info,
+.playbook-step-info { flex: 1; pointer-events: all; }
+.playbook-name,
+.playbook-step-name { font-size: .8rem; font-weight: 600; color: var(--text); line-height: 1.4; }
+.playbook-meta,
+.playbook-step-meta { font-size: .68rem; color: var(--text-muted); margin-top: 3px; }
+
+.playbook-actions,
+.playbook-step-actions {
+  display: flex; gap: 4px;
+}
+
+.playbook-play,
+.playbook-rename,
+.playbook-delete,
+.playbook-step-preview,
+.playbook-step-move,
+.playbook-step-delete {
+  width: 22px; height: 22px; border-radius: 4px;
+  border: none; color: #fff; font-size: .8rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  opacity: 0.7; transition: opacity .1s, transform .1s;
+}
+.playbook-play { background: var(--accent); }
+.playbook-rename { background: var(--accent2); }
+.playbook-step-preview { background: var(--accent2); }
+.playbook-step-move { background: #55608b; }
+.playbook-delete,
+.playbook-step-delete { background: var(--danger); }
+.playbook-play:hover,
+.playbook-rename:hover,
+.playbook-step-preview:hover,
+.playbook-step-move:hover,
+.playbook-delete:hover,
+.playbook-step-delete:hover { opacity: 1; transform: scale(1.1); }
+
+.no-playbooks {
+  padding: 12px; text-align: center; font-size: .75rem;
+  color: var(--text-muted); font-style: italic;
+}
+
+.playbook-section-title {
+  margin-top: 10px;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.playbook-draft-actions,
+.playbook-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.playbook-duration-input {
+  width: 66px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: .72rem;
+  padding: 2px 4px;
+}
+
 /* Inline rename input (presets + recordings) */
 .inline-rename-input {
   background: var(--bg);
@@ -523,12 +615,145 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 
 #user-list { list-style: none; }
 #user-list li {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 6px 0; font-size: .85rem; border-bottom: 1px solid var(--border);
 }
 #user-list li:last-child { border-bottom: none; }
 .user-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+
+.user-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.user-action-btn {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: .64rem;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.user-action-btn:hover {
+  background: #343d60;
+}
+
+.user-ban-btn {
+  border-color: rgba(231, 76, 60, 0.5);
+  color: #ff9999;
+}
+
+.user-ban-btn:hover {
+  background: #5a1f1f;
+  border-color: var(--danger);
+  color: #ffd3d3;
+}
+
+#host-admin-panel {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+#host-admin-panel h3 {
+  font-size: .72rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.host-request-list,
+.host-history-list {
+  list-style: none;
+  max-height: 170px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.12);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.host-request-item,
+.host-history-item,
+.host-empty {
+  font-size: .68rem;
+  color: var(--text);
+  padding: 6px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.host-request-item:last-child,
+.host-history-item:last-child,
+.host-empty:last-child {
+  border-bottom: none;
+}
+
+.host-empty {
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.host-request-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.host-request-user {
+  font-weight: 700;
+}
+
+.host-request-room,
+.host-request-time {
+  color: var(--text-muted);
+  font-size: .62rem;
+}
+
+.host-request-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.host-request-action {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 5px;
+  cursor: pointer;
+  font-size: .62rem;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.host-request-action.allow:hover {
+  background: #1e4a2d;
+  border-color: var(--accent);
+}
+
+.host-request-action.deny:hover {
+  background: #5a1f1f;
+  border-color: var(--danger);
+}
+
+.host-history-item b {
+  font-weight: 700;
 }
 
 .conn-dot {
@@ -549,6 +774,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 8px;
   z-index: 99999;
+}
+
+#credit-watermark {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  z-index: 99998;
+  pointer-events: none;
+  font-size: .72rem;
+  letter-spacing: .05em;
+  color: rgba(232,236,244,0.38);
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
 }
 .toast {
   background: var(--card-bg); border: 1px solid var(--border);

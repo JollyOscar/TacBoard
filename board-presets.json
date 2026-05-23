@@ -1,4 +1,241 @@
 {
-  "presets": [],
-  "nextId": 1
+  "presets": [
+    {
+      "id": 1,
+      "name": "Board 8:05:48 PM",
+      "timestamp": 1779577548216,
+      "strokes": [
+        {
+          "id": "xjtblFI-_lFZAmtRAAAD-1",
+          "socketId": "xjtblFI-_lFZAmtRAAAD",
+          "tool": "draw",
+          "points": [
+            {
+              "x": 343.84010484927916,
+              "y": 219.19633774160732
+            },
+            {
+              "x": 532.5688073394496,
+              "y": 248.69786368260426
+            }
+          ],
+          "color": "#e74c3c",
+          "width": 3,
+          "timestamp": 1779577425597
+        },
+        {
+          "id": "xjtblFI-_lFZAmtRAAAD-2",
+          "socketId": "xjtblFI-_lFZAmtRAAAD",
+          "tool": "laser",
+          "points": [
+            {
+              "x": 379.2267365661861,
+              "y": 337.2024415055951
+            },
+            {
+              "x": 520.7732634338139,
+              "y": 372.60427263479147
+            }
+          ],
+          "color": "#e74c3c",
+          "width": 3,
+          "timestamp": 1779577426029
+        }
+      ],
+      "arrows": [
+        {
+          "id": "ar1",
+          "socketId": "xjtblFI-_lFZAmtRAAAD",
+          "tool": "line",
+          "x1": 361.5334207077326,
+          "y1": 266.3987792472024,
+          "x2": 532.5688073394496,
+          "y2": 307.7009155645982,
+          "color": "#e74c3c",
+          "width": 3,
+          "style": "solid"
+        },
+        {
+          "id": "ar2",
+          "socketId": "xjtblFI-_lFZAmtRAAAD",
+          "tool": "arrow",
+          "x1": 367.43119266055044,
+          "y1": 301.80061037639877,
+          "x2": 532.5688073394496,
+          "y2": 360.80366225839265,
+          "color": "#e74c3c",
+          "width": 3,
+          "style": "dashed"
+        },
+        {
+          "id": "ar3",
+          "socketId": "xjtblFI-_lFZAmtRAAAD",
+          "tool": "arrow",
+          "x1": 402.8178243774574,
+          "y1": 313.60122075279753,
+          "x2": 491.2844036697247,
+          "y2": 328.35198372329603,
+          "color": "#e74c3c",
+          "width": 3,
+          "style": "solid"
+        }
+      ],
+      "tokens": {
+        "t1": {
+          "id": "t1",
+          "x": 384.5426269793227,
+          "y": 366.80917175705787,
+          "color": "transparent",
+          "label": "ball",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t2": {
+          "id": "t2",
+          "x": 472.8489062083156,
+          "y": 253.51663361254276,
+          "color": "transparent",
+          "label": "flag",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t3": {
+          "id": "t3",
+          "x": 435.32557722896325,
+          "y": 315.8492751540799,
+          "color": "transparent",
+          "label": "cone",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t4": {
+          "id": "t4",
+          "x": 474.5390678772152,
+          "y": 252.0169202264704,
+          "color": "transparent",
+          "label": "x",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t5": {
+          "id": "t5",
+          "x": 494.0353903975808,
+          "y": 299.4837036947489,
+          "color": "transparent",
+          "label": "star",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t6": {
+          "id": "t6",
+          "x": 400.3918699867226,
+          "y": 254.04662682375402,
+          "color": "transparent",
+          "label": "shield",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t7": {
+          "id": "t7",
+          "x": 455.8723033861156,
+          "y": 264.0378349671736,
+          "color": "transparent",
+          "label": "target",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t8": {
+          "id": "t8",
+          "x": 524.7770763447622,
+          "y": 302.9957586897258,
+          "color": "transparent",
+          "label": "trophy",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t9": {
+          "id": "t9",
+          "x": 492.16926886647116,
+          "y": 311.223639138386,
+          "color": "transparent",
+          "label": "smiley",
+          "shape": "icon",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t10": {
+          "id": "t10",
+          "x": 358.1627892062615,
+          "y": 308.9858414598438,
+          "color": "#e74c3c",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t11": {
+          "id": "t11",
+          "x": 460.0264047442828,
+          "y": 257.25251021886424,
+          "color": "#3498db",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t12": {
+          "id": "t12",
+          "x": 485.9572684230029,
+          "y": 292.82201207829934,
+          "color": "#2ecc71",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t13": {
+          "id": "t13",
+          "x": 462.7003161171356,
+          "y": 254.99412130470483,
+          "color": "#f39c12",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t14": {
+          "id": "t14",
+          "x": 498.2153639841531,
+          "y": 336.2253485534027,
+          "color": "#9b59b6",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t15": {
+          "id": "t15",
+          "x": 457.1901413217295,
+          "y": 261.8534779594935,
+          "color": "#1abc9c",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t16": {
+          "id": "t16",
+          "x": 481.3105154610725,
+          "y": 286.41829018485714,
+          "color": "#ffffff",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        },
+        "t17": {
+          "id": "t17",
+          "x": 450.01735857900354,
+          "y": 258.09871604326923,
+          "color": "#222222",
+          "label": "1",
+          "shape": "circle",
+          "createdBy": "xjtblFI-_lFZAmtRAAAD"
+        }
+      }
+    }
+  ],
+  "nextId": 2
 }

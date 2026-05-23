@@ -8,6 +8,8 @@ const appEl        = document.getElementById('app');
 const usernameInput= document.getElementById('username-input');
 const roomInput    = document.getElementById('room-input');
 const joinBtn      = document.getElementById('join-btn');
+const joinHintEl   = document.getElementById('join-hint');
+const watermarkEl  = document.getElementById('credit-watermark');
 
 const pitchCanvas  = document.getElementById('pitch-canvas');
 const strokesCanvas= document.getElementById('strokes-canvas');
@@ -27,6 +29,7 @@ const userListEl    = document.getElementById('user-list');
 const toastContainer= document.getElementById('toast-container');
 const ownEraseCheck = document.getElementById('own-erase-check');
 const arrowDashedCheck = document.getElementById('arrow-dashed-check');
+const roomLockBtn = document.getElementById('room-lock-btn');
 
 // ── State ─────────────────────────────────────────────────────
 let socket;
@@ -34,6 +37,20 @@ let myId    = null;
 let myColor = '#ffffff';
 let myName  = '';
 let myRoom  = 'lobby';
+const APP_WATERMARK_TEXT = 'Tac Board by JollyOscar';
+
+const hostJoinModal = document.getElementById('join-request-modal');
+const hostJoinUserEl = document.getElementById('join-request-user');
+const hostJoinRoomEl = document.getElementById('join-request-room');
+const hostJoinAllowBtn = document.getElementById('join-request-allow');
+const hostJoinDenyBtn = document.getElementById('join-request-deny');
+const hostAdminPanelEl = document.getElementById('host-admin-panel');
+const hostRequestListEl = document.getElementById('host-request-list');
+const hostRequestHistoryEl = document.getElementById('host-request-history');
+const hostJoinQueue = [];
+const hostJoinHistory = [];
+const HOST_JOIN_HISTORY_MAX = 18;
+let activeHostJoinRequest = null;
 
 let activeTool   = 'draw'; // draw | arrow | erase | ping | select
 let isDrawing    = false;
@@ -44,9 +61,129 @@ let arrowSeq     = 0;    // local arrow ID counter
 let ownEraseOnly = false; // only erase own lines when checked
 let arrowDashed  = false; // dashed arrows
 let isReplaying  = false; // true while a server replay is running
+let isPlaybookPlaying = false; // true while server-driven playbook playback is running
+let myIsHost = false;
+let roomLocked = false;
 
 // Throttle timestamps
 let _lastCursorEmit = 0;
+
+function isBoardLocked() {
+  return isReplaying || isPlaybookPlaying || (roomLocked && !myIsHost);
+}
+
+function setJoinHint(text) {
+  if (joinHintEl) joinHintEl.innerHTML = text;
+}
+
+function updateWatermark(hostName) {
+  if (!watermarkEl) return;
+  watermarkEl.textContent = APP_WATERMARK_TEXT;
+}
+
+function renderRoomLockButton() {
+  if (!roomLockBtn) return;
+  roomLockBtn.disabled = !myIsHost;
+  roomLockBtn.textContent = roomLocked ? '🔒 Room Locked' : '🔓 Room Unlocked';
+  roomLockBtn.title = myIsHost
+    ? (roomLocked ? 'Unlock board edits for teammates' : 'Lock board edits for teammates')
+    : (roomLocked ? 'Host locked board edits' : 'Only host can toggle room lock');
+}
+
+function renderHostJoinRequestModal() {
+  if (!hostJoinModal || !hostJoinUserEl || !hostJoinRoomEl) return;
+  if (!hostJoinQueue.length) {
+    activeHostJoinRequest = null;
+    hostJoinModal.classList.add('hidden');
+    renderHostAdminPanel();
+    return;
+  }
+
+  if (!activeHostJoinRequest || !hostJoinQueue.some(r => r.requestId === activeHostJoinRequest.requestId)) {
+    activeHostJoinRequest = hostJoinQueue[0];
+  }
+  hostJoinUserEl.textContent = activeHostJoinRequest.username;
+  hostJoinRoomEl.textContent = activeHostJoinRequest.room;
+  hostJoinModal.classList.remove('hidden');
+  renderHostAdminPanel();
+}
+
+function addHostJoinHistory(entry) {
+  hostJoinHistory.unshift(entry);
+  if (hostJoinHistory.length > HOST_JOIN_HISTORY_MAX) hostJoinHistory.length = HOST_JOIN_HISTORY_MAX;
+}
+
+function removeHostJoinRequest(requestId) {
+  const idx = hostJoinQueue.findIndex(r => r.requestId === requestId);
+  if (idx === -1) return null;
+  const [req] = hostJoinQueue.splice(idx, 1);
+  if (activeHostJoinRequest?.requestId === requestId) {
+    activeHostJoinRequest = null;
+  }
+  return req;
+}
+
+function renderHostAdminPanel() {
+  if (!hostAdminPanelEl || !hostRequestListEl || !hostRequestHistoryEl) return;
+
+  if (!myIsHost) {
+    hostAdminPanelEl.classList.add('hidden');
+    return;
+  }
+
+  hostAdminPanelEl.classList.remove('hidden');
+
+  if (!hostJoinQueue.length) {
+    hostRequestListEl.innerHTML = '<li class="host-empty">No pending requests</li>';
+  } else {
+    hostRequestListEl.innerHTML = hostJoinQueue.map(req => {
+      const ageSec = Math.max(0, Math.floor((Date.now() - (req.createdAt || Date.now())) / 1000));
+      return `
+        <li class="host-request-item" data-request-id="${escHtml(req.requestId)}">
+          <div class="host-request-top">
+            <span class="host-request-user">${escHtml(req.username)}</span>
+            <span class="host-request-time">${ageSec}s</span>
+          </div>
+          <div class="host-request-room">${escHtml(req.room)}</div>
+          <div class="host-request-actions">
+            <button class="host-request-action allow" data-action="allow" data-request-id="${escHtml(req.requestId)}">Allow</button>
+            <button class="host-request-action deny" data-action="deny" data-request-id="${escHtml(req.requestId)}">Deny</button>
+          </div>
+        </li>
+      `;
+    }).join('');
+  }
+
+  if (!hostJoinHistory.length) {
+    hostRequestHistoryEl.innerHTML = '<li class="host-empty">No decisions yet</li>';
+  } else {
+    hostRequestHistoryEl.innerHTML = hostJoinHistory.map(item => {
+      return `<li class="host-history-item"><b>${escHtml(item.action)}</b> ${escHtml(item.username)} <span class="host-request-room">(${escHtml(item.room)})</span></li>`;
+    }).join('');
+  }
+}
+
+function answerHostJoinRequest(allow, requestId = null) {
+  const targetRequestId = requestId || activeHostJoinRequest?.requestId;
+  if (!targetRequestId) return;
+
+  const req = hostJoinQueue.find(r => r.requestId === targetRequestId);
+  if (!req) return;
+
+  socket?.emit('room-join-response', {
+    requestId: targetRequestId,
+    allow
+  });
+  removeHostJoinRequest(targetRequestId);
+  addHostJoinHistory({
+    action: allow ? 'Allowed' : 'Denied',
+    username: req.username,
+    room: req.room,
+    at: Date.now()
+  });
+
+  renderHostJoinRequestModal();
+}
 
 // ── Per-user undo stack ───────────────────────────────────────
 // Each entry: { type: 'stroke'|'arrow'|'token', id }
@@ -455,7 +592,7 @@ let lastMousePos = null;
 
 // ── Pointer events on liveCanvas ──────────────────────────────
 liveCanvas.addEventListener('pointerdown', e => {
-  if (activeTool === 'select' || isReplaying) return;
+  if (activeTool === 'select' || isBoardLocked()) return;
   const pos = toLogical(e.clientX, e.clientY);
 
   if (activeTool === 'ping') {
@@ -608,7 +745,8 @@ const ICONS = {
   star: `<svg viewBox="0 0 24 24" fill="#f1c40f" stroke="#f39c12" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
   shield: `<svg viewBox="0 0 24 24" fill="none" stroke="#2980b9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#3498db"/></svg>`,
   target: `<svg viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="#fff"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="#e74c3c"/></svg>`,
-  trophy: `<svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 01-10 0V4z" fill="#f1c40f"/><path d="M7 4H4a2 2 0 00-2 2v1a5 5 0 005 5h0M17 4h3a2 2 0 01-5 5h0"/></svg>`
+  trophy: `<svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 01-10 0V4z" fill="#f1c40f"/><path d="M7 4H4a2 2 0 00-2 2v1a5 5 0 005 5h0M17 4h3a2 2 0 01-5 5h0"/></svg>`,
+  smiley: `<svg viewBox="0 0 24 24" fill="none" stroke="#f1c40f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="#f1c40f" /><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="#222" /><line x1="9" y1="9" x2="9.01" y2="9" stroke="#222" stroke-width="2" /><line x1="15" y1="9" x2="15.01" y2="9" stroke="#222" stroke-width="2" /></svg>`
 };
 const iconImages = {};
 Object.entries(ICONS).forEach(([name, svgTxt]) => {
@@ -692,6 +830,7 @@ function createTokenEl(token) {
   let dragging = false, ox = 0, oy = 0;
   let _lastTokenEmit = 0;
   el.addEventListener('pointerdown', e => {
+    if (isBoardLocked()) return;
     if (e.target === del) return;
     dragging = true;
     el.classList.add('dragging');
@@ -839,9 +978,79 @@ function connectSocket(username) {
     socket.emit('join', { username, room: myRoom });
   });
 
-  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you, room, recActive, repActive, repDuration, repPosition, repPaused }) => {
+  socket.on('join-pending-approval', ({ room, host }) => {
+    joinBtn.disabled = true;
+    joinBtn.textContent = 'Waiting for host...';
+    setJoinHint(`Waiting for <strong>${escHtml(host)}</strong> to approve your join request to <strong>${escHtml(room)}</strong>...`);
+    toast(`⏳ Join request sent to ${escHtml(host)}`);
+  });
+
+  socket.on('join-approved', () => {
+    socket.emit('join', { username: myName, room: myRoom });
+  });
+
+  socket.on('join-denied', ({ room, reason }) => {
+    myIsHost = false;
+    roomLocked = false;
+    hostJoinQueue.length = 0;
+    renderRoomLockButton();
+    renderHostJoinRequestModal();
+    appEl.classList.add('hidden');
+    joinScreen.classList.remove('hidden');
+    joinBtn.disabled = false;
+    joinBtn.textContent = 'Join Board';
+    setJoinHint(`Join denied for <strong>${escHtml(room || myRoom)}</strong>. ${escHtml(reason || 'Host denied request.')}`);
+    toast(`❌ Join denied: ${escHtml(reason || 'Host denied request.')}`);
+  });
+
+  socket.on('room-removed', ({ room, reason }) => {
+    myIsHost = false;
+    roomLocked = false;
+    hostJoinQueue.length = 0;
+    renderRoomLockButton();
+    renderHostJoinRequestModal();
+    appEl.classList.add('hidden');
+    joinScreen.classList.remove('hidden');
+    joinBtn.disabled = false;
+    joinBtn.textContent = 'Join Board';
+    setJoinHint(`${escHtml(reason || 'You were removed from the room.')}<br><strong>${escHtml(room || myRoom)}</strong>`);
+    toast(`🚪 ${escHtml(reason || 'Removed from room')}`);
+  });
+
+  socket.on('room-join-request', ({ requestId, username: reqUser, room }) => {
+    if (hostJoinQueue.some(r => r.requestId === requestId)) return;
+    hostJoinQueue.push({ requestId, username: reqUser, room, createdAt: Date.now() });
+    renderHostJoinRequestModal();
+    toast(`🔐 ${escHtml(reqUser)} is requesting access to ${escHtml(room)}`);
+  });
+
+  socket.on('room-join-request-expired', ({ requestId, username: reqUser, room, reason }) => {
+    const req = removeHostJoinRequest(requestId);
+    if (req) {
+      addHostJoinHistory({
+        action: reason === 'requester-left' ? 'Expired' : 'Timed out',
+        username: req.username,
+        room: req.room,
+        at: Date.now()
+      });
+      renderHostJoinRequestModal();
+      toast(`⌛ Request closed: ${escHtml(reqUser || req.username)} (${escHtml(reason || 'expired')})`);
+    }
+  });
+
+  socket.on('init-state', ({ strokes, tokens: tokenList, arrows, users, you, room, hostUsername, roomLocked: roomLockedFromServer, recActive, repActive, repDuration, repPosition, repPaused }) => {
+    joinScreen.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    joinBtn.disabled = false;
+    joinBtn.textContent = 'Join Board';
+    setJoinHint('Share the URL with teammates to collaborate in real-time.<br>Pick an active room or type a new name to create one.');
+    resizeCanvases();
+
     myColor = you.color;
     colorPicker.value = myColor;
+    roomLocked = !!roomLockedFromServer;
+    updateWatermark(hostUsername || you.username);
+    renderRoomLockButton();
 
     // Update room badge
     if (room) {
@@ -897,6 +1106,7 @@ function connectSocket(username) {
     // Request recordings list and presets when joining
     socket.emit('get-recordings');
     socket.emit('get-presets');
+    socket.emit('get-playbooks');
   });
 
   socket.on('user-joined', (user) => {
@@ -906,6 +1116,12 @@ function connectSocket(username) {
     if (user) toast(`${escHtml(user.username)} left`);
   });
   socket.on('user-list', (users) => updateUserList(users));
+
+  socket.on('room-lock-state', ({ locked, by }) => {
+    roomLocked = !!locked;
+    renderRoomLockButton();
+    toast(roomLocked ? `🔒 Room locked by ${escHtml(by || 'host')}` : `🔓 Room unlocked by ${escHtml(by || 'host')}`);
+  });
 
   // Live draw from others
   socket.on('draw-move', ({ socketId, tool, width, points, color }) => {
@@ -1124,14 +1340,95 @@ function connectSocket(username) {
   });
 
   socket.on('preset-loaded', applyBoardSnapshot);
+
+  // ── Playbooks socket events ─────────────────────────────────────
+  socket.on('playbooks-list', (list) => {
+    _playbooks = list || [];
+    if (_selectedPlaybookId && !_playbooks.some(p => p.id === _selectedPlaybookId)) {
+      _selectedPlaybookId = null;
+    }
+    renderPlaybooksList();
+  });
+
+  socket.on('playbook-saved', ({ name }) => {
+    toast(`📚 Playbook saved: ${escHtml(name)}`);
+  });
+
+  socket.on('playbook-started', ({ name }) => {
+    isPlaybookPlaying = true;
+    liveCanvas.style.pointerEvents = 'none';
+    toast(`▶ Playbook running: ${escHtml(name)}`);
+  });
+
+  socket.on('playbook-step', ({ targets, duration, startAt }) => {
+    isPlaybookPlaying = true;
+    liveCanvas.style.pointerEvents = 'none';
+    animateTokensToTargets(targets || [], Number(duration) || 1200, Number(startAt) || Date.now());
+  });
+
+  const onPlaybookDone = () => {
+    isPlaybookPlaying = false;
+    if (!isReplaying) liveCanvas.style.pointerEvents = '';
+    cancelAnimationFrame(_playbookAnimRaf);
+    _playbookAnimRaf = null;
+    toast('⏹ Playbook playback ended');
+  };
+
+  socket.on('playbook-finished', onPlaybookDone);
+  socket.on('playbook-stopped', onPlaybookDone);
 }
 
 // ── User list ─────────────────────────────────────────────────
 function updateUserList(users) {
+  users = Array.isArray(users) ? users : [];
   userListEl.innerHTML = '';
+  const host = users.find(u => u.isHost);
+  const amHost = !!users.find(u => u.id === myId && u.isHost);
+  myIsHost = amHost;
+  if (!myIsHost) {
+    hostJoinQueue.length = 0;
+    activeHostJoinRequest = null;
+  }
+  renderRoomLockButton();
+  renderHostAdminPanel();
+  if (host) updateWatermark(host.username);
+
   users.forEach(u => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="user-dot" style="background:${u.color}"></span>${escHtml(u.username)}${u.id === myId ? ' <em style="font-size:.7rem;color:#888">(you)</em>' : ''}`;
+    const nameWrap = document.createElement('div');
+    nameWrap.className = 'user-row-main';
+    nameWrap.innerHTML = `<span class="user-dot" style="background:${u.color}"></span>${u.isHost ? '👑 ' : ''}${escHtml(u.username)}${u.id === myId ? ' <em style="font-size:.7rem;color:#888">(you)</em>' : ''}`;
+    li.appendChild(nameWrap);
+
+    if (amHost && u.id !== myId) {
+      const actions = document.createElement('div');
+      actions.className = 'user-actions';
+
+      const kickBtn = document.createElement('button');
+      kickBtn.className = 'user-action-btn user-kick-btn';
+      kickBtn.title = `Kick ${u.username}`;
+      kickBtn.textContent = 'Kick';
+      kickBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        socket?.emit('host-kick-user', { userId: u.id });
+        toast(`🚪 Removed ${escHtml(u.username)}`);
+      });
+
+      const banBtn = document.createElement('button');
+      banBtn.className = 'user-action-btn user-ban-btn';
+      banBtn.title = `Ban ${u.username}`;
+      banBtn.textContent = 'Ban';
+      banBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        socket?.emit('host-ban-user', { userId: u.id });
+        toast(`⛔ Banned ${escHtml(u.username)}`);
+      });
+
+      actions.appendChild(kickBtn);
+      actions.appendChild(banBtn);
+      li.appendChild(actions);
+    }
+
     userListEl.appendChild(li);
   });
 }
@@ -1155,6 +1452,11 @@ document.getElementById('tool-erase').addEventListener('click',  () => setTool('
 document.getElementById('tool-ping').addEventListener('click',   () => setTool('ping'));
 document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
 document.getElementById('tool-undo').addEventListener('click',   () => undoLast());
+
+roomLockBtn?.addEventListener('click', () => {
+  if (!myIsHost) return;
+  socket?.emit('room-lock-set', { locked: !roomLocked });
+});
 
 sizePicker.addEventListener('input', () => { sizeVal.textContent = sizePicker.value; });
 ownEraseCheck?.addEventListener('change',      () => { ownEraseOnly = ownEraseCheck.checked; updateClearBtnLabels(); });
@@ -1533,6 +1835,306 @@ let _isCapturingVideo  = false;
 let _captureCanvas     = null;
 let _captureStream     = null;
 
+// ── Playbooks (multi-step simultaneous token movement) ───────
+let _playbooks = [];
+let _selectedPlaybookId = null;
+let _draftPlaybookSteps = [];
+let _playbookAnimRaf = null;
+
+function normalizeImportedPlaybookSteps(rawSteps) {
+  if (!Array.isArray(rawSteps)) return [];
+  return rawSteps.slice(0, 200).map((step, idx) => {
+    const name = (step?.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
+    const duration = Math.max(150, Math.min(10000, Number(step?.duration) || 1200));
+    const sourceTokens = Array.isArray(step?.targets)
+      ? step.targets
+      : Object.values(step?.tokens || {});
+    const tokensMap = {};
+    sourceTokens.slice(0, 300).forEach((t) => {
+      const id = (t?.id || '').toString().substring(0, 40);
+      if (!id) return;
+      tokensMap[id] = {
+        id,
+        x: Number(t.x) || 0,
+        y: Number(t.y) || 0,
+        color: (t.color || '#ffffff').toString().substring(0, 24),
+        label: (t.label || '').toString().substring(0, 20),
+        shape: (t.shape || 'circle').toString().substring(0, 20),
+        createdBy: (t.createdBy || '').toString().substring(0, 60)
+      };
+    });
+    return { name, duration, tokens: tokensMap };
+  }).filter(step => Object.keys(step.tokens || {}).length > 0);
+}
+
+function snapshotTokensForStep() {
+  const out = {};
+  Object.values(tokens).forEach(t => {
+    out[t.id] = {
+      id: t.id,
+      x: Number(t.x) || 0,
+      y: Number(t.y) || 0,
+      color: t.color,
+      label: t.label,
+      shape: t.shape,
+      createdBy: t.createdBy
+    };
+  });
+  return out;
+}
+
+function setTokenVisual(el, token) {
+  if (token.shape === 'icon' || token.shape === 'ball') {
+    const iconName = token.shape === 'ball' ? 'ball' : token.label;
+    el.className = 'token token-icon';
+    el.innerHTML = ICONS[iconName] || ICONS.ball;
+    el.style.background = 'transparent';
+    el.style.border = 'none';
+    el.style.boxShadow = 'none';
+  } else if (token.shape === 'emoji') {
+    el.className = 'token token-emoji';
+    el.textContent = token.label || '🙂';
+    el.style.background = 'transparent';
+    el.style.border = 'none';
+    el.style.boxShadow = 'none';
+  } else {
+    el.className = 'token';
+    el.textContent = token.label || '1';
+    el.style.background = token.color || '#ffffff';
+    el.style.color = (token.color === '#ffffff' || token.color === '#fff') ? '#222' : '#fff';
+  }
+}
+
+function ensureTokenLocal(tokenData) {
+  if (!tokens[tokenData.id]) {
+    tokens[tokenData.id] = { ...tokenData };
+    tokenLayer.appendChild(createTokenEl(tokens[tokenData.id]));
+    return;
+  }
+  const existing = tokens[tokenData.id];
+  const needsRemount = existing.shape !== tokenData.shape;
+  tokens[tokenData.id] = { ...existing, ...tokenData };
+  let el = document.getElementById('token-' + tokenData.id);
+  if (!el || needsRemount) {
+    if (el) el.remove();
+    el = createTokenEl(tokens[tokenData.id]);
+    tokenLayer.appendChild(el);
+  } else {
+    setTokenVisual(el, tokens[tokenData.id]);
+    if (!el.querySelector('.token-delete')) {
+      const del = document.createElement('button');
+      del.className = 'token-delete';
+      del.textContent = '×';
+      del.title = 'Remove';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        socket?.emit('token-remove', { id: tokenData.id });
+      });
+      el.appendChild(del);
+    }
+  }
+  positionToken(el, tokens[tokenData.id].x, tokens[tokenData.id].y);
+}
+
+function animateTokensToTargets(targets, duration, startAt) {
+  const targetMap = {};
+  (targets || []).forEach(t => {
+    if (!t?.id) return;
+    targetMap[t.id] = {
+      id: t.id,
+      x: Number(t.x) || 0,
+      y: Number(t.y) || 0,
+      color: t.color,
+      label: t.label,
+      shape: t.shape,
+      createdBy: t.createdBy
+    };
+  });
+
+  const fromMap = {};
+  Object.values(tokens).forEach(t => {
+    fromMap[t.id] = { x: Number(t.x) || 0, y: Number(t.y) || 0 };
+  });
+  Object.values(targetMap).forEach(t => {
+    if (!fromMap[t.id]) fromMap[t.id] = { x: t.x, y: t.y };
+    ensureTokenLocal(t);
+  });
+
+  const removeIds = Object.keys(tokens).filter(id => !targetMap[id]);
+  cancelAnimationFrame(_playbookAnimRaf);
+
+  const run = () => {
+    const now = Date.now();
+    const p = Math.max(0, Math.min(1, (now - startAt) / duration));
+
+    Object.values(targetMap).forEach(to => {
+      const from = fromMap[to.id] || { x: to.x, y: to.y };
+      const token = tokens[to.id];
+      if (!token) return;
+      token.x = from.x + (to.x - from.x) * p;
+      token.y = from.y + (to.y - from.y) * p;
+      const el = document.getElementById('token-' + to.id);
+      if (el) positionToken(el, token.x, token.y);
+    });
+
+    if (p < 1) {
+      _playbookAnimRaf = requestAnimationFrame(run);
+      return;
+    }
+
+    Object.values(targetMap).forEach(to => {
+      ensureTokenLocal(to);
+      const token = tokens[to.id];
+      token.x = to.x;
+      token.y = to.y;
+      const el = document.getElementById('token-' + to.id);
+      if (el) positionToken(el, token.x, token.y);
+    });
+
+    removeIds.forEach(id => {
+      delete tokens[id];
+      const el = document.getElementById('token-' + id);
+      if (el) el.remove();
+    });
+  };
+
+  _playbookAnimRaf = requestAnimationFrame(run);
+}
+
+function renderPlaybookDraftList() {
+  const list = document.getElementById('playbook-draft-list');
+  if (!list) return;
+  if (!_draftPlaybookSteps.length) {
+    list.innerHTML = '<li class="no-playbooks">No draft steps yet</li>';
+    return;
+  }
+
+  list.innerHTML = '';
+  _draftPlaybookSteps.forEach((step, idx) => {
+    const li = document.createElement('li');
+    li.className = 'playbook-step-item';
+    const tokenCount = Object.keys(step.tokens || {}).length;
+    li.innerHTML = `
+      <div class="playbook-step-info">
+        <div class="playbook-step-name">${escHtml(step.name)}</div>
+        <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration:</div>
+      </div>
+      <div class="playbook-step-actions">
+        <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="150" max="10000" value="${step.duration}" />
+        <button class="playbook-step-move" data-step-index="${idx}" data-dir="up" title="Move up">↑</button>
+        <button class="playbook-step-move" data-step-index="${idx}" data-dir="down" title="Move down">↓</button>
+        <button class="playbook-step-preview" data-step-index="${idx}" title="Preview this step">👁</button>
+        <button class="playbook-step-delete" data-step-index="${idx}" title="Delete step">×</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+
+  list.querySelectorAll('.playbook-duration-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const i = +input.dataset.stepIndex;
+      if (!_draftPlaybookSteps[i]) return;
+      _draftPlaybookSteps[i].duration = Math.max(150, Math.min(10000, Number(input.value) || 1200));
+      input.value = _draftPlaybookSteps[i].duration;
+    });
+  });
+
+  list.querySelectorAll('.playbook-step-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.stepIndex;
+      _draftPlaybookSteps.splice(i, 1);
+      renderPlaybookDraftList();
+    });
+  });
+
+  list.querySelectorAll('.playbook-step-move').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.stepIndex;
+      const dir = btn.dataset.dir;
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || i >= _draftPlaybookSteps.length || j >= _draftPlaybookSteps.length) return;
+      const tmp = _draftPlaybookSteps[i];
+      _draftPlaybookSteps[i] = _draftPlaybookSteps[j];
+      _draftPlaybookSteps[j] = tmp;
+      renderPlaybookDraftList();
+    });
+  });
+
+  list.querySelectorAll('.playbook-step-preview').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.stepIndex;
+      const step = _draftPlaybookSteps[i];
+      if (!step) return;
+      animateTokensToTargets(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 40);
+      toast(`👁 Previewing ${escHtml(step.name)}`);
+    });
+  });
+}
+
+function renderPlaybooksList() {
+  const list = document.getElementById('playbooks-list');
+  if (!list) return;
+  if (!_playbooks.length) {
+    list.innerHTML = '<li class="no-playbooks">No playbooks yet</li>';
+    _selectedPlaybookId = null;
+    return;
+  }
+
+  list.innerHTML = '';
+  _playbooks.forEach(pb => {
+    const li = document.createElement('li');
+    li.className = 'playbook-item' + (pb.id === _selectedPlaybookId ? ' selected' : '');
+    li.innerHTML = `
+      <div class="playbook-info" data-playbook-id="${pb.id}">
+        <div class="playbook-name">${escHtml(pb.name)}</div>
+        <div class="playbook-meta">${pb.stepCount} step${pb.stepCount === 1 ? '' : 's'} · ${(pb.totalDuration / 1000).toFixed(1)}s</div>
+      </div>
+      <div class="playbook-actions">
+        <button class="playbook-play" data-playbook-id="${pb.id}" title="Run this playbook">▶</button>
+        <button class="playbook-rename" data-playbook-id="${pb.id}" title="Rename">✏️</button>
+        <button class="playbook-delete" data-playbook-id="${pb.id}" title="Delete">×</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+
+  list.querySelectorAll('.playbook-info').forEach(el => {
+    el.addEventListener('click', () => {
+      _selectedPlaybookId = +el.dataset.playbookId;
+      renderPlaybooksList();
+    });
+  });
+
+  list.querySelectorAll('.playbook-play').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = +btn.dataset.playbookId;
+      if (!socket || !id || isBoardLocked()) return;
+      socket.emit('playbook-start', { playbookId: id });
+      closeModal(document.getElementById('playbooks-modal'));
+    });
+  });
+
+  list.querySelectorAll('.playbook-rename').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = +btn.dataset.playbookId;
+      const pb = _playbooks.find(p => p.id === id);
+      if (!pb) return;
+      const newName = prompt('Rename playbook:', pb.name);
+      if (newName && newName.trim()) socket?.emit('rename-playbook', { playbookId: id, newName: newName.trim() });
+    });
+  });
+
+  list.querySelectorAll('.playbook-delete').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = +btn.dataset.playbookId;
+      if (confirm('Delete this playbook?')) socket?.emit('delete-playbook', { playbookId: id });
+    });
+  });
+}
+
 function drawCompositeFrame(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(pitchCanvas,   0, 0, w, h);
@@ -1724,7 +2326,7 @@ function downloadRecordingAsMP4(recId) {
   }
   
   // Need to replay and capture
-  if (_recActive || isReplaying) {
+  if (_recActive || isBoardLocked()) {
     toast('⚠️ Wait for current recording or replay to finish');
     return;
   }
@@ -1917,7 +2519,7 @@ function tickReplayBar() {
 }
 
 document.getElementById('record-btn').addEventListener('click', () => {
-  if (isReplaying) return;
+  if (isBoardLocked()) return;
   if (_recActive) {
     socket?.emit('recording-stop');
   } else {
@@ -1926,7 +2528,7 @@ document.getElementById('record-btn').addEventListener('click', () => {
 });
 
 document.getElementById('replay-btn').addEventListener('click', () => {
-  if (isReplaying || _recActive || !_selectedRecId || !socket) return;
+  if (isBoardLocked() || _recActive || !_selectedRecId || !socket) return;
   socket.emit('replay-start', { recId: _selectedRecId });
 });
 
@@ -2032,11 +2634,21 @@ function doJoin() {
   localStorage.setItem('tac-board-username', name);
   localStorage.setItem('tac-board-room', myRoom);
   location.hash = myRoom;
-  joinScreen.classList.add('hidden');
-  appEl.classList.remove('hidden');
-  resizeCanvases();
+  joinBtn.disabled = true;
+  joinBtn.textContent = 'Requesting...';
+  setJoinHint(`Connecting to <strong>${escHtml(myRoom)}</strong>...`);
   connectSocket(name);
 }
+
+hostJoinAllowBtn?.addEventListener('click', () => answerHostJoinRequest(true));
+hostJoinDenyBtn?.addEventListener('click', () => answerHostJoinRequest(false));
+hostRequestListEl?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.host-request-action');
+  if (!btn) return;
+  const requestId = btn.dataset.requestId;
+  if (!requestId) return;
+  answerHostJoinRequest(btn.dataset.action === 'allow', requestId);
+});
 
 joinBtn.addEventListener('click', doJoin);
 usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { roomInput.focus(); e.preventDefault(); } });
@@ -2054,10 +2666,13 @@ mobileToggle?.addEventListener('click', () => {
 // ── Modal / Popup handling ────────────────────────────────────
 const recordingsModal = document.getElementById('recordings-modal');
 const presetsModal = document.getElementById('presets-modal');
+const playbooksModal = document.getElementById('playbooks-modal');
 const openRecordingsBtn = document.getElementById('open-recordings-btn');
 const openPresetsBtn = document.getElementById('open-presets-btn');
+const openPlaybooksBtn = document.getElementById('open-playbooks-btn');
 const closeRecordingsBtn = document.getElementById('close-recordings-modal');
 const closePresetsBtn = document.getElementById('close-presets-modal');
+const closePlaybooksBtn = document.getElementById('close-playbooks-modal');
 
 function openModal(modal) {
   modal.classList.remove('hidden');
@@ -2069,8 +2684,14 @@ function closeModal(modal) {
 
 openRecordingsBtn.addEventListener('click', () => openModal(recordingsModal));
 openPresetsBtn.addEventListener('click', () => openModal(presetsModal));
+openPlaybooksBtn.addEventListener('click', () => {
+  renderPlaybookDraftList();
+  renderPlaybooksList();
+  openModal(playbooksModal);
+});
 closeRecordingsBtn.addEventListener('click', () => closeModal(recordingsModal));
 closePresetsBtn.addEventListener('click', () => closeModal(presetsModal));
+closePlaybooksBtn.addEventListener('click', () => closeModal(playbooksModal));
 
 // Close modals when clicking outside the content
 recordingsModal.addEventListener('click', (e) => {
@@ -2079,17 +2700,132 @@ recordingsModal.addEventListener('click', (e) => {
 presetsModal.addEventListener('click', (e) => {
   if (e.target === presetsModal) closeModal(presetsModal);
 });
+playbooksModal.addEventListener('click', (e) => {
+  if (e.target === playbooksModal) closeModal(playbooksModal);
+});
 
 // Close modals with Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!recordingsModal.classList.contains('hidden')) closeModal(recordingsModal);
     if (!presetsModal.classList.contains('hidden')) closeModal(presetsModal);
+    if (!playbooksModal.classList.contains('hidden')) closeModal(playbooksModal);
   }
+});
+
+document.getElementById('playbook-new-draft-btn')?.addEventListener('click', () => {
+  _draftPlaybookSteps = [];
+  renderPlaybookDraftList();
+  toast('📝 New playbook draft started');
+});
+
+document.getElementById('playbook-capture-step-btn')?.addEventListener('click', () => {
+  const n = _draftPlaybookSteps.length + 1;
+  const stepName = prompt('Step name:', `Step ${n}`) || `Step ${n}`;
+  _draftPlaybookSteps.push({
+    name: stepName.trim().substring(0, 60) || `Step ${n}`,
+    duration: 1200,
+    tokens: snapshotTokensForStep()
+  });
+  renderPlaybookDraftList();
+  toast(`➕ Captured ${escHtml(stepName)} with current token positions`);
+});
+
+document.getElementById('playbook-clear-draft-btn')?.addEventListener('click', () => {
+  _draftPlaybookSteps = [];
+  renderPlaybookDraftList();
+});
+
+document.getElementById('playbook-save-draft-btn')?.addEventListener('click', () => {
+  if (!_draftPlaybookSteps.length) {
+    toast('⚠️ Add at least one step before saving');
+    return;
+  }
+  const name = prompt('Playbook name:', `Playbook ${new Date().toLocaleTimeString()}`);
+  if (!name || !name.trim()) return;
+  socket?.emit('save-playbook', {
+    name: name.trim(),
+    steps: _draftPlaybookSteps
+  });
+  _draftPlaybookSteps = [];
+  renderPlaybookDraftList();
+});
+
+document.getElementById('playbook-start-btn')?.addEventListener('click', () => {
+  if (!_selectedPlaybookId) {
+    toast('⚠️ Select a playbook first');
+    return;
+  }
+  if (isBoardLocked()) return;
+  socket?.emit('playbook-start', { playbookId: _selectedPlaybookId });
+  closeModal(playbooksModal);
+});
+
+document.getElementById('playbook-stop-btn')?.addEventListener('click', () => {
+  socket?.emit('playbook-stop');
+});
+
+document.getElementById('playbook-export-btn')?.addEventListener('click', () => {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    playbooks: _playbooks
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tac-playbooks-${new Date().toISOString().slice(0, 10)}.tacplaybooks`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('⬇️ Playbooks exported');
+});
+
+const playbookImportInput = document.getElementById('playbook-import-file');
+document.getElementById('playbook-import-btn')?.addEventListener('click', () => {
+  playbookImportInput?.click();
+});
+
+playbookImportInput?.addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const parsed = JSON.parse(ev.target?.result || '{}');
+      const rawPlaybooks = Array.isArray(parsed)
+        ? parsed
+        : (Array.isArray(parsed?.playbooks) ? parsed.playbooks : []);
+
+      if (!rawPlaybooks.length) {
+        toast('⚠️ No playbooks found in file');
+        return;
+      }
+
+      let imported = 0;
+      rawPlaybooks.slice(0, 80).forEach((pb, idx) => {
+        const name = (pb?.name || `Imported Playbook ${idx + 1}`).toString().trim().substring(0, 80);
+        const steps = normalizeImportedPlaybookSteps(pb?.steps);
+        if (!name || !steps.length) return;
+        socket?.emit('save-playbook', { name, steps });
+        imported += 1;
+      });
+
+      toast(imported ? `⬆️ Imported ${imported} playbook${imported === 1 ? '' : 's'}` : '⚠️ No valid playbooks to import');
+    } catch {
+      toast('❌ Invalid playbook file format');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
 });
 
 // ── Resize handling ───────────────────────────────────────────
 window.addEventListener('resize', () => {
+  if (appEl.classList.contains('hidden')) return;
   resizeCanvases();
   repositionAllTokens();
   Object.keys(remoteCursors).forEach(id => removeCursor(id));

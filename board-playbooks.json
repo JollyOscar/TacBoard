@@ -1,0 +1,1010 @@
+{
+  "playbooks": [
+    {
+      "id": 1,
+      "name": "Playbook 8:01:05 PM",
+      "timestamp": 1779577265533,
+      "steps": [
+        {
+          "name": "Step 1",
+          "duration": 1200,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 423.56702492434147,
+              "y": 310.69632320960966,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "lIwacTjeiJeWsOGJAAAB"
+            }
+          }
+        },
+        {
+          "name": "Step 2",
+          "duration": 1200,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 423.56702492434147,
+              "y": 310.69632320960966,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "lIwacTjeiJeWsOGJAAAB"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Playbook 8:04:39 PM",
+      "timestamp": 1779577479081,
+      "steps": [
+        {
+          "name": "Step 1",
+          "duration": 1200,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 467.11143431877235,
+              "y": 325.50703543966193,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 407.97341472731944,
+              "y": 288.9184647417391,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 471.6971287694019,
+              "y": 326.59697944252355,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 405.34496482880417,
+              "y": 279.48431551884704,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        },
+        {
+          "name": "Step 2",
+          "duration": 1200,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 467.11143431877235,
+              "y": 325.50703543966193,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 407.97341472731944,
+              "y": 288.9184647417391,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 524.7770763447622,
+              "y": 302.9957586897258,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 358.1627892062615,
+              "y": 308.9858414598438,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        },
+        {
+          "name": "Step 3",
+          "duration": 1200,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 384.5426269793227,
+              "y": 366.80917175705787,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 472.8489062083156,
+              "y": 253.51663361254276,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 524.7770763447622,
+              "y": 302.9957586897258,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 358.1627892062615,
+              "y": 308.9858414598438,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Playbook 8:05:06 PM",
+      "timestamp": 1779577506155,
+      "steps": [
+        {
+          "name": "Step 1",
+          "duration": 2500,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 384.5426269793227,
+              "y": 366.80917175705787,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 472.8489062083156,
+              "y": 253.51663361254276,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 524.7770763447622,
+              "y": 302.9957586897258,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 358.1627892062615,
+              "y": 308.9858414598438,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        },
+        {
+          "name": "Step 2",
+          "duration": 2500,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 384.5426269793227,
+              "y": 366.80917175705787,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 472.8489062083156,
+              "y": 253.51663361254276,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 524.7770763447622,
+              "y": 302.9957586897258,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 358.1627892062615,
+              "y": 308.9858414598438,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        },
+        {
+          "name": "Step 3",
+          "duration": 2500,
+          "tokens": {
+            "t1": {
+              "id": "t1",
+              "x": 384.5426269793227,
+              "y": 366.80917175705787,
+              "color": "transparent",
+              "label": "ball",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t2": {
+              "id": "t2",
+              "x": 472.8489062083156,
+              "y": 253.51663361254276,
+              "color": "transparent",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t3": {
+              "id": "t3",
+              "x": 435.32557722896325,
+              "y": 315.8492751540799,
+              "color": "transparent",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t4": {
+              "id": "t4",
+              "x": 474.5390678772152,
+              "y": 252.0169202264704,
+              "color": "transparent",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t5": {
+              "id": "t5",
+              "x": 494.0353903975808,
+              "y": 299.4837036947489,
+              "color": "transparent",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t6": {
+              "id": "t6",
+              "x": 400.3918699867226,
+              "y": 254.04662682375402,
+              "color": "transparent",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t7": {
+              "id": "t7",
+              "x": 455.8723033861156,
+              "y": 264.0378349671736,
+              "color": "transparent",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t8": {
+              "id": "t8",
+              "x": 524.7770763447622,
+              "y": 302.9957586897258,
+              "color": "transparent",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t9": {
+              "id": "t9",
+              "x": 492.16926886647116,
+              "y": 311.223639138386,
+              "color": "transparent",
+              "label": "smiley",
+              "shape": "icon",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t10": {
+              "id": "t10",
+              "x": 358.1627892062615,
+              "y": 308.9858414598438,
+              "color": "#e74c3c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t11": {
+              "id": "t11",
+              "x": 460.0264047442828,
+              "y": 257.25251021886424,
+              "color": "#3498db",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t12": {
+              "id": "t12",
+              "x": 485.9572684230029,
+              "y": 292.82201207829934,
+              "color": "#2ecc71",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t13": {
+              "id": "t13",
+              "x": 462.7003161171356,
+              "y": 254.99412130470483,
+              "color": "#f39c12",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t14": {
+              "id": "t14",
+              "x": 498.2153639841531,
+              "y": 336.2253485534027,
+              "color": "#9b59b6",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t15": {
+              "id": "t15",
+              "x": 457.1901413217295,
+              "y": 261.8534779594935,
+              "color": "#1abc9c",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t16": {
+              "id": "t16",
+              "x": 481.3105154610725,
+              "y": 286.41829018485714,
+              "color": "#ffffff",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            },
+            "t17": {
+              "id": "t17",
+              "x": 450.01735857900354,
+              "y": 258.09871604326923,
+              "color": "#222222",
+              "label": "1",
+              "shape": "circle",
+              "createdBy": "xjtblFI-_lFZAmtRAAAD"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "nextId": 4
+}

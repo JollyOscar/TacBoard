@@ -20,7 +20,7 @@
         <div id="active-rooms-list" class="active-rooms-list"></div>
       </div>
       <button id="join-btn">Join Board</button>
-      <p class="join-hint">Share the URL with teammates to collaborate in real-time.<br>Pick an active room or type a new name to create one.</p>
+      <p id="join-hint" class="join-hint">Share the URL with teammates to collaborate in real-time.<br>Pick an active room or type a new name to create one.</p>
     </div>
   </div>
 
@@ -100,6 +100,9 @@
             <button class="token-swatch token-icon-btn" data-icon="trophy" title="Trophy">
               <svg viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 01-10 0V4z" fill="#f1c40f"/><path d="M7 4H4a2 2 0 00-2 2v1a5 5 0 005 5h0M17 4h3a2 2 0 012 2v1a5 5 0 01-5 5h0"/></svg>
             </button>
+            <button class="token-swatch token-icon-btn" data-icon="smiley" title="Smiley Face">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#f1c40f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="#f1c40f" /><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="#222" /><line x1="9" y1="9" x2="9.01" y2="9" stroke="#222" stroke-width="2" /><line x1="15" y1="9" x2="15.01" y2="9" stroke="#222" stroke-width="2" /></svg>
+            </button>
 
             <!-- Numbers -->
             <button class="token-swatch" data-color="#e74c3c" data-label="1"  style="background:#e74c3c">1</button>
@@ -130,6 +133,13 @@
 
       <div class="tool-divider"></div>
 
+      <!-- Playbooks button -->
+      <div class="tool-group">
+        <button id="open-playbooks-btn" class="action-btn" title="Create and run multi-step simultaneous token plays">📚 Plays</button>
+      </div>
+
+      <div class="tool-divider"></div>
+
       <div class="tool-group">
         <label class="own-erase-label" title="When checked, eraser only removes your own lines">
           <input type="checkbox" id="own-erase-check" />
@@ -137,6 +147,7 @@
         </label>
         <button id="clear-drawings-btn" class="action-btn" title="Clear drawings">🗑️ Clear Lines</button>
         <button id="clear-board-btn"    class="action-btn danger" title="Clear everything">💥 Clear All</button>
+        <button id="room-lock-btn"      class="action-btn" title="Host can lock board edits for everyone else">🔓 Room Unlocked</button>
         <button id="screenshot-btn"     class="action-btn" title="Download board as PNG">📸 Screenshot</button>
         <button id="record-btn"         class="action-btn" title="Record actions on the board for playback">⏺ Record</button>
         <button id="replay-btn"          class="action-btn" disabled title="Replay the selected recording on the board for everyone">▶ Replay</button>
@@ -174,12 +185,44 @@
     <aside id="user-panel">
       <h3>Online <span id="conn-status" class="conn-dot" title="Connected"></span></h3>
       <ul id="user-list"></ul>
+
+      <div id="host-admin-panel" class="hidden">
+        <h3>Host Queue</h3>
+        <ul id="host-request-list" class="host-request-list">
+          <li class="host-empty">No pending requests</li>
+        </ul>
+
+        <h3 style="margin-top: 10px;">Recent Decisions</h3>
+        <ul id="host-request-history" class="host-history-list">
+          <li class="host-empty">No decisions yet</li>
+        </ul>
+      </div>
     </aside>
 
   </div>
 
   <!-- Toast notifications -->
   <div id="toast-container"></div>
+  <div id="credit-watermark" aria-hidden="true">Tac Board by JollyOscar</div>
+
+  <!-- Host Join Request Modal -->
+  <div id="join-request-modal" class="modal hidden">
+    <div class="modal-content" style="max-width: 420px;">
+      <div class="modal-header">
+        <h2>🔐 Join Request</h2>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 14px; color: var(--text-muted);">
+          <strong id="join-request-user">User</strong> wants to join
+          <strong id="join-request-room">room</strong>.
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <button id="join-request-allow" class="action-btn">✅ Allow</button>
+          <button id="join-request-deny" class="action-btn danger">🚫 Deny</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Recordings Modal -->
   <div id="recordings-modal" class="modal hidden">
@@ -213,6 +256,45 @@
         <ul id="presets-list" class="presets-list">
           <li class="no-presets">No presets saved</li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbooks Modal -->
+  <div id="playbooks-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📚 Playbooks</h2>
+        <button class="modal-close" id="close-playbooks-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="playbook-draft-actions">
+          <button id="playbook-new-draft-btn" class="action-btn" title="Start a new draft">📝 New Draft</button>
+          <button id="playbook-capture-step-btn" class="action-btn" title="Capture current token positions as a step">➕ Capture Step</button>
+          <button id="playbook-save-draft-btn" class="action-btn" title="Save this draft as a reusable playbook">💾 Save Draft</button>
+          <button id="playbook-clear-draft-btn" class="action-btn danger" title="Clear current draft steps">🗑️ Clear Draft</button>
+        </div>
+
+        <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button id="playbook-export-btn" class="action-btn" title="Download all saved playbooks to a file">⬇️ Export Plays</button>
+          <button id="playbook-import-btn" class="action-btn" title="Import playbooks from a file">⬆️ Import Plays</button>
+        </div>
+        <input type="file" id="playbook-import-file" accept=".json,.tacplaybooks" class="hidden" />
+
+        <div class="playbook-section-title">Draft Steps</div>
+        <ul id="playbook-draft-list" class="playbook-steps-list">
+          <li class="no-playbooks">No draft steps yet</li>
+        </ul>
+
+        <div class="playbook-section-title">Saved Playbooks</div>
+        <ul id="playbooks-list" class="playbooks-list">
+          <li class="no-playbooks">No playbooks yet</li>
+        </ul>
+
+        <div class="playbook-footer-actions">
+          <button id="playbook-start-btn" class="action-btn" title="Play selected playbook for everyone in the room">▶ Run Selected</button>
+          <button id="playbook-stop-btn" class="action-btn danger" title="Stop current playbook playback">⏹ Stop Playback</button>
+        </div>
       </div>
     </div>
   </div>
