@@ -1409,10 +1409,10 @@ function connectSocket(username) {
     toast(`▶ Playbook running: ${escHtml(name)}`);
   });
 
-  socket.on('playbook-step', ({ targets, duration, startAt, travelSpeed }) => {
+  socket.on('playbook-step', ({ targets, duration, startAt, stepSpeed }) => {
     isPlaybookPlaying = true;
     liveCanvas.style.pointerEvents = 'none';
-    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now(), travelSpeed);
+    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now(), stepSpeed);
   });
 
   const onPlaybookDone = () => {
@@ -1914,13 +1914,59 @@ let _selectedDraftStepIndex = -1;
 let _playbookGhostNodes = [];
 let _playbookSpeedDrag = null;
 let _playbookSpeedTetherNodes = new Map();
+const DEFAULT_PLAYBOOK_TOKEN_SPEED = 260;
+const DEFAULT_PLAYBOOK_STEP_SPEED = 260;
+
+function clampPlaybookStepSpeed(value, fallback = DEFAULT_PLAYBOOK_STEP_SPEED) {
+  return Math.max(40, Math.min(2000, Number(value) || fallback));
+}
+
+function clampPlaybookTokenSpeed(value, fallback = DEFAULT_PLAYBOOK_TOKEN_SPEED) {
+  return Math.max(40, Math.min(2000, Number(value) || fallback));
+}
+
+function clampPlaybookTokenSpeedFactor(value, fallback = 1) {
+  return Math.max(0.25, Math.min(4, Number(value) || fallback));
+}
+
+function getPlaybookStepBaseSpeed(step) {
+  return clampPlaybookStepSpeed(step?.speed, DEFAULT_PLAYBOOK_STEP_SPEED);
+}
+
+function getPlaybookTokenSpeedFactor(step, token) {
+  if (token && Number.isFinite(Number(token.speedFactor))) {
+    return clampPlaybookTokenSpeedFactor(token.speedFactor, 1);
+  }
+  const baseSpeed = getPlaybookStepBaseSpeed(step);
+  if (token && Number.isFinite(Number(token.speed))) {
+    return clampPlaybookTokenSpeed(token.speed, baseSpeed) / baseSpeed;
+  }
+  return 1;
+}
+
+function getPlaybookTokenActualSpeed(step, token) {
+  const baseSpeed = getPlaybookStepBaseSpeed(step);
+  return clampPlaybookTokenSpeed(baseSpeed * getPlaybookTokenSpeedFactor(step, token), baseSpeed);
+}
+
+function summarizePlaybookTokenSpeeds(step) {
+  const speeds = Object.values(step?.tokens || {})
+    .map(token => getPlaybookTokenActualSpeed(step, token))
+    .filter(Number.isFinite);
+  if (!speeds.length) return `${Math.round(DEFAULT_PLAYBOOK_TOKEN_SPEED)} px/s`;
+  const min = Math.min(...speeds);
+  const max = Math.max(...speeds);
+  return min === max
+    ? `${Math.round(min)} px/s each`
+    : `${Math.round(min)}-${Math.round(max)} px/s`;
+}
 
 function normalizeImportedPlaybookSteps(rawSteps) {
   if (!Array.isArray(rawSteps)) return [];
   return rawSteps.slice(0, 200).map((step, idx) => {
     const name = (step?.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
     const duration = Math.max(250, Math.min(10000, Number(step?.duration) || 1200));
-    const speed = Math.max(40, Math.min(2000, Number(step?.speed) || 260));
+    const speed = getPlaybookStepBaseSpeed(step);
     const sourceTokens = Array.isArray(step?.targets)
       ? step.targets
       : Object.values(step?.tokens || {});
@@ -1928,6 +1974,7 @@ function normalizeImportedPlaybookSteps(rawSteps) {
     sourceTokens.slice(0, 300).forEach((t) => {
       const id = (t?.id || '').toString().substring(0, 40);
       if (!id) return;
+      const tokenSpeedFactor = getPlaybookTokenSpeedFactor(step, t);
       tokensMap[id] = {
         id,
         x: Number(t.x) || 0,
@@ -1935,7 +1982,8 @@ function normalizeImportedPlaybookSteps(rawSteps) {
         color: (t.color || '#ffffff').toString().substring(0, 24),
         label: (t.label || '').toString().substring(0, 20),
         shape: (t.shape || 'circle').toString().substring(0, 20),
-        createdBy: (t.createdBy || '').toString().substring(0, 60)
+        createdBy: (t.createdBy || '').toString().substring(0, 60),
+        speedFactor: tokenSpeedFactor
       };
     });
     return { name, duration, speed, tokens: tokensMap };
@@ -1952,7 +2000,8 @@ function snapshotTokensForStep() {
       color: t.color,
       label: t.label,
       shape: t.shape,
-      createdBy: t.createdBy
+      createdBy: t.createdBy,
+      speedFactor: 1
     };
   });
   return out;
@@ -2003,27 +2052,8 @@ function makePlaybookGhostCopy(tokenEl, tokenData) {
   ghost.style.left = '0';
   ghost.style.top = '0';
   ghost.style.transform = 'translate(-50%, -50%)';
-  ghost.style.opacity = '1';
+  ghost.style.opacity = '0.16';
   return ghost;
-}
-
-function getPlaybookLeadTokenId(step) {
-  const entries = Object.values(step?.tokens || {});
-  if (!entries.length) return null;
-  if (entries.length === 1) return entries[0].id || null;
-
-  let best = entries[0];
-  let maxDistance = -1;
-  entries.forEach(target => {
-    const current = tokens[target.id];
-    if (!current) return;
-    const distance = Math.hypot((Number(target.x) || 0) - (Number(current.x) || 0), (Number(target.y) || 0) - (Number(current.y) || 0));
-    if (distance > maxDistance) {
-      maxDistance = distance;
-      best = target;
-    }
-  });
-  return best?.id || entries[0].id || null;
 }
 
 function renderPlaybookSpeedTether() {
@@ -2034,10 +2064,8 @@ function renderPlaybookSpeedTether() {
   const rect = canvasStack.getBoundingClientRect();
   const scaleX = rect.width / PITCH_W;
   const scaleY = rect.height / PITCH_H;
-  const minSpeed = 40;
-  const maxSpeed = 2000;
-  const stepSpeed = Math.max(minSpeed, Math.min(maxSpeed, Number(step.speed) || 260));
   const activeTokenIds = new Set(Object.keys(step.tokens || {}));
+  const stepBaseSpeed = getPlaybookStepBaseSpeed(step);
 
   _playbookSpeedTetherNodes.forEach((node, tokenId) => {
     if (activeTokenIds.has(tokenId)) return;
@@ -2048,6 +2076,10 @@ function renderPlaybookSpeedTether() {
   Object.entries(step.tokens || {}).forEach(([tokenId, origin]) => {
     const current = tokens[tokenId];
     if (!origin || !current) return;
+    const tokenStep = step.tokens[tokenId] || origin;
+    const tokenSpeedFactor = getPlaybookTokenSpeedFactor(step, tokenStep);
+    if (tokenStep.speedFactor == null) tokenStep.speedFactor = tokenSpeedFactor;
+    const tokenSpeed = clampPlaybookTokenSpeed(stepBaseSpeed * tokenSpeedFactor, stepBaseSpeed);
 
     const startX = Number(origin.x) * scaleX;
     const startY = Number(origin.y) * scaleY;
@@ -2057,7 +2089,7 @@ function renderPlaybookSpeedTether() {
     if (distance < 1) return;
 
     const angle = Math.atan2(endY - startY, endX - startX);
-    const handleT = (stepSpeed - minSpeed) / (maxSpeed - minSpeed);
+    const handleT = (tokenSpeedFactor - 0.25) / (4 - 0.25);
     let tether = _playbookSpeedTetherNodes.get(tokenId);
     let hitbox;
     let line;
@@ -2082,7 +2114,7 @@ function renderPlaybookSpeedTether() {
       handle = document.createElement('button');
       handle.type = 'button';
       handle.className = 'playbook-speed-tether-handle';
-      handle.title = 'Drag to change speed';
+      handle.title = 'Drag to change token speed';
       tether.appendChild(handle);
 
       const updateSpeedFromPointer = (clientX, clientY) => {
@@ -2093,10 +2125,9 @@ function renderPlaybookSpeedTether() {
         const dy = tether._endY - tether._startY;
         const projected = ((localX - tether._startX) * dx + (localY - tether._startY) * dy) / (tether._distance ** 2);
         const clamped = Math.max(0, Math.min(1, projected));
-        const newSpeed = minSpeed + (maxSpeed - minSpeed) * clamped;
-        step.speed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
-        renderPlaybookDraftList();
-        renderPlaybookSpeedTether();
+        const newFactor = 0.25 + (4 - 0.25) * clamped;
+        tokenStep.speedFactor = clampPlaybookTokenSpeedFactor(newFactor, 1);
+        syncHandle();
       };
 
       const beginDrag = (e, captureEl) => {
@@ -2118,6 +2149,8 @@ function renderPlaybookSpeedTether() {
         if (_playbookSpeedDrag.pointerId !== e.pointerId) return;
         updateSpeedFromPointer(e.clientX, e.clientY);
         _playbookSpeedDrag = null;
+        renderPlaybookDraftList();
+        renderPlaybookSpeedTether();
       };
 
       hitbox.addEventListener('pointerdown', e => beginDrag(e, hitbox));
@@ -2154,6 +2187,7 @@ function renderPlaybookSpeedTether() {
       ghost.style.left = '0';
       ghost.style.top = '0';
       ghost.style.transform = 'translate(-50%, -50%)';
+      ghost.style.opacity = '0.16';
     }
     if (handle) {
       handle.style.left = `${distance * Math.max(0, Math.min(1, handleT))}px`;
@@ -2169,15 +2203,16 @@ function resetPlaybookAnimationSchedule() {
   _playbookAnimRaf = null;
 }
 
-function schedulePlaybookAnimation(targets, duration, startAt) {
+function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
   const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
   const safeStartAt = Number(startAt) || Date.now();
   const plannedStart = Math.max(Date.now() + 16, safeStartAt, _playbookAnimBusyUntil);
   _playbookAnimBusyUntil = plannedStart + safeDuration;
+  const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
 
   const timerId = setTimeout(() => {
     _playbookStepStartTimers = _playbookStepStartTimers.filter(id => id !== timerId);
-    animateTokensToTargets(targets || [], safeDuration, plannedStart);
+    animateTokensToTargets(targets || [], safeDuration, plannedStart, safeStepSpeed);
   }, Math.max(0, plannedStart - Date.now()));
 
   _playbookStepStartTimers.push(timerId);
@@ -2190,6 +2225,7 @@ function captureDraftStep(stepName = null) {
   _draftPlaybookSteps.push({
     name: safeName,
     duration: 1200,
+    speed: DEFAULT_PLAYBOOK_STEP_SPEED,
     tokens: snapshotTokensForStep()
   });
   _selectedDraftStepIndex = _draftPlaybookSteps.length - 1;
@@ -2283,7 +2319,7 @@ function ensureTokenLocal(tokenData) {
   positionToken(el, tokens[tokenData.id].x, tokens[tokenData.id].y);
 }
 
-function animateTokensToTargets(targets, duration, startAt) {
+function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
   const targetMap = {};
   (targets || []).forEach(t => {
     if (!t?.id) return;
@@ -2294,7 +2330,8 @@ function animateTokensToTargets(targets, duration, startAt) {
       color: t.color,
       label: t.label,
       shape: t.shape,
-      createdBy: t.createdBy
+      createdBy: t.createdBy,
+      speedFactor: clampPlaybookTokenSpeedFactor(t.speedFactor, Number.isFinite(Number(t.speed)) && Number(stepSpeed) ? Number(t.speed) / Number(stepSpeed) : 1)
     };
   });
 
@@ -2315,20 +2352,28 @@ function animateTokensToTargets(targets, duration, startAt) {
   const rect = canvasStack.getBoundingClientRect();
   const scaleX = rect.width / PITCH_W;
   const scaleY = rect.height / PITCH_H;
-  Object.values(targetMap).forEach(to => {
+  const targetMeta = Object.values(targetMap).map(to => {
     const from = fromMap[to.id] || { x: to.x, y: to.y };
-    const tokenEl = document.getElementById('token-' + to.id);
-    if (!tokenEl) return;
-
     const startX = from.x * scaleX;
     const startY = from.y * scaleY;
     const endX = to.x * scaleX;
     const endY = to.y * scaleY;
+    const distance = Math.hypot(endX - startX, endY - startY);
+    const speed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED) * clampPlaybookTokenSpeedFactor(to.speedFactor, 1);
+    const travelDuration = Math.max(250, Math.ceil((distance / speed) * 1000));
+    return { to, from, startX, startY, endX, endY, distance, speed, travelDuration };
+  });
+  const completionDuration = Math.max(duration, ...targetMeta.map(meta => meta.travelDuration));
+
+  targetMeta.forEach(meta => {
+    const { to, startX, startY, endX, endY, distance } = meta;
+    const tokenEl = document.getElementById('token-' + to.id);
+    if (!tokenEl) return;
     const trail = document.createElement('div');
     trail.className = 'playbook-move-trail';
     trail.style.left = `${startX}px`;
     trail.style.top = `${startY}px`;
-    trail.style.width = `${Math.hypot(endX - startX, endY - startY)}px`;
+    trail.style.width = `${distance}px`;
     trail.style.transform = `rotate(${Math.atan2(endY - startY, endX - startX)}rad)`;
 
     const line = document.createElement('div');
@@ -2338,7 +2383,7 @@ function animateTokensToTargets(targets, duration, startAt) {
     [0.2, 0.5, 0.8].forEach(fraction => {
       const dot = document.createElement('span');
       dot.className = 'playbook-move-trail-dot';
-      dot.style.left = `${Math.hypot(endX - startX, endY - startY) * fraction}px`;
+      dot.style.left = `${distance * fraction}px`;
       trail.appendChild(dot);
     });
 
@@ -2346,7 +2391,7 @@ function animateTokensToTargets(targets, duration, startAt) {
     ghost.classList.add('playbook-move-ghost');
     ghost.style.left = '0';
     ghost.style.top = '0';
-    ghost.style.opacity = '0.36';
+    ghost.style.opacity = '0.16';
     ghost.style.transform = 'translate(-50%, -50%)';
     trail.appendChild(ghost);
 
@@ -2360,10 +2405,12 @@ function animateTokensToTargets(targets, duration, startAt) {
 
   const run = () => {
     const now = Date.now();
-    const p = Math.max(0, Math.min(1, (now - startAt) / duration));
+    const elapsed = now - startAt;
+    const allDone = elapsed >= completionDuration;
 
-    Object.values(targetMap).forEach(to => {
-      const from = fromMap[to.id] || { x: to.x, y: to.y };
+    targetMeta.forEach(meta => {
+      const { to, from, travelDuration } = meta;
+      const p = Math.max(0, Math.min(1, elapsed / travelDuration));
       const token = tokens[to.id];
       if (!token) return;
       token.x = from.x + (to.x - from.x) * p;
@@ -2372,7 +2419,7 @@ function animateTokensToTargets(targets, duration, startAt) {
       if (el) positionToken(el, token.x, token.y);
     });
 
-    if (p < 1) {
+    if (!allDone) {
       _playbookAnimRaf = requestAnimationFrame(run);
       return;
     }
@@ -2414,10 +2461,29 @@ function renderPlaybookDraftList() {
     li.className = 'playbook-step-item' + (idx === _selectedDraftStepIndex ? ' selected' : '');
     li.dataset.stepIndex = idx;
     const tokenCount = Object.keys(step.tokens || {}).length;
+    const stepBaseSpeed = getPlaybookStepBaseSpeed(step);
+    const speedSummary = summarizePlaybookTokenSpeeds(step);
+    const tokenSpeedRows = Object.entries(step.tokens || {}).map(([tokenId, token]) => {
+      const factor = getPlaybookTokenSpeedFactor(step, token);
+      const tokenSpeed = getPlaybookTokenActualSpeed(step, token);
+      return `
+        <div class="playbook-token-speed-row">
+          <span class="playbook-token-speed-label">${escHtml((token.label || token.id || tokenId).toString())}</span>
+          <input class="playbook-token-speed-input" data-step-index="${idx}" data-token-id="${tokenId}" type="range" min="0.25" max="4" step="0.05" value="${factor}" />
+          <span class="playbook-token-speed-value">${Math.round(tokenSpeed)} px/s</span>
+        </div>
+      `;
+    }).join('');
     li.innerHTML = `
       <div class="playbook-step-info">
         <div class="playbook-step-name">${escHtml(step.name)}</div>
-        <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration: ${Math.max(250, Math.min(10000, Number(step.duration) || 1200))}ms · speed: ${Math.round(step.speed || 260)} px/s</div>
+        <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration: ${Math.max(250, Math.min(10000, Number(step.duration) || 1200))}ms · speeds: ${speedSummary}</div>
+        <div class="playbook-step-speed-row">
+          <span class="playbook-step-speed-label">Base speed</span>
+          <input class="playbook-step-speed-input" data-step-index="${idx}" type="range" min="40" max="2000" step="10" value="${stepBaseSpeed}" />
+          <span class="playbook-step-speed-value">${Math.round(stepBaseSpeed)} px/s</span>
+        </div>
+        <div class="playbook-token-speeds">${tokenSpeedRows || '<div class="playbook-token-speed-empty">No token speeds yet</div>'}</div>
       </div>
       <div class="playbook-step-actions">
         <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="250" max="10000" value="${step.duration}" />
@@ -2440,6 +2506,30 @@ function renderPlaybookDraftList() {
       if (!_draftPlaybookSteps[i]) return;
       _draftPlaybookSteps[i].duration = Math.max(250, Math.min(10000, Number(input.value) || 1200));
       input.value = _draftPlaybookSteps[i].duration;
+    });
+  });
+
+  list.querySelectorAll('.playbook-step-speed-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const i = +input.dataset.stepIndex;
+      if (!_draftPlaybookSteps[i]) return;
+      _draftPlaybookSteps[i].speed = clampPlaybookStepSpeed(input.value, DEFAULT_PLAYBOOK_STEP_SPEED);
+      input.value = _draftPlaybookSteps[i].speed;
+      renderPlaybookDraftList();
+      renderPlaybookSpeedTether();
+    });
+  });
+
+  list.querySelectorAll('.playbook-token-speed-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const i = +input.dataset.stepIndex;
+      const tokenId = input.dataset.tokenId;
+      const stepObj = _draftPlaybookSteps[i];
+      if (!stepObj || !stepObj.tokens?.[tokenId]) return;
+      stepObj.tokens[tokenId].speedFactor = clampPlaybookTokenSpeedFactor(input.value, 1);
+      input.value = stepObj.tokens[tokenId].speedFactor;
+      renderPlaybookDraftList();
+      renderPlaybookSpeedTether();
     });
   });
 

@@ -327,11 +327,64 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .playbook-step-item.selected { background: rgba(90, 104, 255, 0.16); border-color: rgba(90, 104, 255, 0.35); }
 
 .playbook-info,
-.playbook-step-info { flex: 1; pointer-events: all; }
+.playbook-step-info {
+  flex: 1;
+  pointer-events: all;
+}
+.playbook-step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .playbook-name,
 .playbook-step-name { font-size: .8rem; font-weight: 600; color: var(--text); line-height: 1.4; }
 .playbook-meta,
 .playbook-step-meta { font-size: .68rem; color: var(--text-muted); margin-top: 3px; }
+
+.playbook-step-speed-row,
+.playbook-token-speed-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.playbook-step-speed-label,
+.playbook-token-speed-label {
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.playbook-step-speed-value,
+.playbook-token-speed-value {
+  font-size: .66rem;
+  color: var(--text-muted);
+  min-width: 58px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.playbook-step-speed-input,
+.playbook-token-speed-input {
+  width: 100%;
+  accent-color: var(--accent2);
+}
+
+.playbook-token-speeds {
+  display: grid;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.playbook-token-speed-empty {
+  font-size: .66rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
 
 .playbook-actions,
 .playbook-step-actions {
@@ -446,7 +499,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   position: absolute;
   pointer-events: none;
   filter: saturate(1) brightness(1.08);
-  opacity: 1;
+  opacity: 0.16;
   z-index: 1;
 }
 
@@ -499,6 +552,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   position: absolute;
   filter: saturate(0.9) brightness(1.08);
   pointer-events: none;
+  opacity: 0.16;
   z-index: 14;
 }
 

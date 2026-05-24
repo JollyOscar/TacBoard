@@ -569,6 +569,7 @@ let playbooks = [];
 let nextPlaybookId = 1;
 
 function sanitizeTokenForPlaybook(token) {
+  const speedFactor = Math.max(0.25, Math.min(4, Number(token.speedFactor) || 1));
   return {
     id: (token.id || '').toString().substring(0, 40),
     x: Number(token.x) || 0,
@@ -576,7 +577,8 @@ function sanitizeTokenForPlaybook(token) {
     color: (token.color || '#ffffff').toString().substring(0, 24),
     label: (token.label || '').toString().substring(0, 20),
     shape: (token.shape || 'circle').toString().substring(0, 20),
-    createdBy: (token.createdBy || '').toString().substring(0, 60)
+    createdBy: (token.createdBy || '').toString().substring(0, 60),
+    speedFactor
   };
 }
 
@@ -591,7 +593,11 @@ function normalizePlaybookSteps(steps) {
       : Object.values(step.tokens || {});
     const safeTokens = {};
     tokensArr.slice(0, 250).forEach(t => {
-      const safe = sanitizeTokenForPlaybook(t || {});
+      const legacySpeed = Number(t?.speed);
+      const speedFactor = Number.isFinite(Number(t?.speedFactor))
+        ? Number(t.speedFactor)
+        : (Number.isFinite(legacySpeed) ? legacySpeed / safeSpeed : 1);
+      const safe = sanitizeTokenForPlaybook({ ...(t || {}), speedFactor });
       if (safe.id) safeTokens[safe.id] = safe;
     });
     return {
@@ -706,7 +712,6 @@ function clearPlaybookTimers(room) {
 
 function getPlaybookStepTravelDuration(room, step) {
   const fallbackDuration = Math.max(250, Number(step?.duration) || 1200);
-  const speed = Math.max(40, Number(step?.speed) || 260);
   const targets = Object.values(step?.tokens || {});
   let maxTravelMs = 0;
 
@@ -717,6 +722,9 @@ function getPlaybookStepTravelDuration(room, step) {
     const dy = (Number(target.y) || 0) - (Number(current.y) || 0);
     const distance = Math.hypot(dx, dy);
     if (distance <= 0) return;
+    const baseSpeed = Math.max(40, Number(step?.speed) || 260);
+    const speedFactor = Math.max(0.25, Math.min(4, Number(target.speedFactor) || 1));
+    const speed = Math.max(40, baseSpeed * speedFactor);
     const travelMs = (distance / speed) * 1000;
     if (travelMs > maxTravelMs) maxTravelMs = travelMs;
   });
@@ -761,7 +769,7 @@ function startPlaybook(roomId, playbook) {
   let offset = 0;
   steps.forEach((step, idx) => {
     const duration = getPlaybookStepTravelDuration(room, step);
-    const travelSpeed = Math.max(40, Number(step.speed) || 260);
+    const stepSpeed = Math.max(40, Number(step.speed) || 260);
     const stepStartAt = baseStartAt + offset;
     const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
 
@@ -775,7 +783,7 @@ function startPlaybook(roomId, playbook) {
         stepIndex: idx,
         stepName: step.name,
         duration,
-        travelSpeed,
+        stepSpeed,
         startAt: stepStartAt,
         targets: Object.values(step.tokens || {})
       });
