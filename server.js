@@ -600,11 +600,26 @@ function normalizePlaybookSteps(steps) {
       const safe = sanitizeTokenForPlaybook({ ...(t || {}), speedFactor });
       if (safe.id) safeTokens[safe.id] = safe;
     });
+
+    const safeArrows = (Array.isArray(step.arrows) ? step.arrows : []).slice(0, 100).map(a => ({
+      id: (a.id || '').toString().substring(0, 40),
+      socketId: (a.socketId || '').toString().substring(0, 40),
+      tool: (a.tool || 'arrow').toString().substring(0, 20),
+      x1: Number(a.x1) || 0,
+      y1: Number(a.y1) || 0,
+      x2: Number(a.x2) || 0,
+      y2: Number(a.y2) || 0,
+      color: (a.color || '#ffffff').toString().substring(0, 24),
+      width: Number(a.width) || 4,
+      style: (a.style || 'solid').toString().substring(0, 20)
+    }));
+
     return {
       name: safeName,
       duration: safeDuration,
       speed: safeSpeed,
-      tokens: safeTokens
+      tokens: safeTokens,
+      arrows: safeArrows
     };
   });
 }

@@ -2046,7 +2046,7 @@ function snapshotTokensForStep() {
 }
 
 function snapshotArrowsForStep() {
-  const stepArrows = allArrows.filter(a => a.tool === 'arrow').map(a => ({ ...a }));
+  const stepArrows = allArrows.filter(a => a.tool === 'arrow' || a.tool === 'line').map(a => ({ ...a }));
   return stepArrows;
 }
 
