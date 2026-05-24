@@ -802,6 +802,7 @@ function createTokenEl(token) {
     el.style.background = token.color;
     if (token.color === '#ffffff' || token.color === '#fff') el.style.color = '#222';
   }
+  el.style.touchAction = 'none';
   el.classList.add('pop-in');
 
   // Place
@@ -851,6 +852,15 @@ function createTokenEl(token) {
   // Drag
   let dragging = false, ox = 0, oy = 0;
   let _lastTokenEmit = 0;
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+    try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch {}
+    // Emit final position on pointer up to ensure sync
+    socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+    renderPlaybookSpeedTether();
+  };
   el.addEventListener('pointerdown', e => {
     if (isBoardLocked()) return;
     if (e.target === del) return;
@@ -882,13 +892,15 @@ function createTokenEl(token) {
     e.stopPropagation();
   });
   el.addEventListener('pointerup', e => {
-    if (!dragging) return;
-    dragging = false;
-    el.classList.remove('dragging');
-    // Emit final position on pointer up to ensure sync
-    socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
-    renderPlaybookSpeedTether();
+    endDrag(e);
     e.stopPropagation();
+  });
+  el.addEventListener('pointercancel', e => {
+    endDrag(e);
+    e.stopPropagation();
+  });
+  el.addEventListener('lostpointercapture', e => {
+    endDrag(e);
   });
 
   return el;
@@ -1974,7 +1986,23 @@ function clearPlaybookGhosts() {
 }
 
 function removePlaybookSpeedTether() {
-  document.getElementById('playbook-speed-tether')?.remove();
+  document.querySelectorAll('.playbook-speed-tether').forEach(node => node.remove());
+}
+
+function makePlaybookGhostCopy(tokenEl, tokenData) {
+  const ghost = tokenEl?.cloneNode(true) || createTokenEl(tokenData);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  ghost.querySelectorAll('.token-delete').forEach(node => node.remove());
+  ghost.querySelectorAll('input, button').forEach(node => node.remove());
+  ghost.classList.add('playbook-speed-tether-ghost');
+  ghost.classList.remove('pop-in', 'dragging');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.style.left = '0';
+  ghost.style.top = '0';
+  ghost.style.transform = 'translate(-50%, -50%)';
+  ghost.style.opacity = '1';
+  return ghost;
 }
 
 function getPlaybookLeadTokenId(step) {
@@ -2002,97 +2030,105 @@ function renderPlaybookSpeedTether() {
   if (_selectedDraftStepIndex < 0 || !_draftPlaybookSteps[_selectedDraftStepIndex]) return;
 
   const step = _draftPlaybookSteps[_selectedDraftStepIndex];
-  const tokenId = getPlaybookLeadTokenId(step);
-  if (!tokenId) return;
-
-  const current = tokens[tokenId];
-  const target = step.tokens?.[tokenId];
-  if (!current || !target) return;
-
   const rect = canvasStack.getBoundingClientRect();
   const scaleX = rect.width / PITCH_W;
   const scaleY = rect.height / PITCH_H;
-  const startX = Number(current.x) * scaleX;
-  const startY = Number(current.y) * scaleY;
-  const endX = Number(target.x) * scaleX;
-  const endY = Number(target.y) * scaleY;
-  const distance = Math.hypot(endX - startX, endY - startY);
-  if (distance < 1) return;
-
-  const angle = Math.atan2(endY - startY, endX - startX);
   const minSpeed = 40;
   const maxSpeed = 2000;
   const stepSpeed = Math.max(minSpeed, Math.min(maxSpeed, Number(step.speed) || 260));
-  const handleT = (stepSpeed - minSpeed) / (maxSpeed - minSpeed);
-  const tether = document.createElement('div');
-  tether.id = 'playbook-speed-tether';
-  tether.className = 'playbook-speed-tether';
-  tether.style.left = `${startX}px`;
-  tether.style.top = `${startY}px`;
-  tether.style.width = `${distance}px`;
-  tether.style.transform = `rotate(${angle}rad)`;
 
-  const line = document.createElement('div');
-  line.className = 'playbook-speed-tether-line';
-  tether.appendChild(line);
+  Object.entries(step.tokens || {}).forEach(([tokenId, origin]) => {
+    const current = tokens[tokenId];
+    if (!origin || !current) return;
 
-  const ghost = document.getElementById('token-' + tokenId)?.cloneNode(true);
-  if (ghost) {
-    ghost.classList.add('playbook-speed-tether-ghost');
-    ghost.classList.remove('pop-in', 'dragging');
-    ghost.querySelector('.token-delete')?.remove();
-    ghost.style.left = '0';
-    ghost.style.top = '0';
-    ghost.style.transform = 'translate(-50%, -50%)';
-    ghost.style.opacity = '0.78';
+    const startX = Number(origin.x) * scaleX;
+    const startY = Number(origin.y) * scaleY;
+    const endX = Number(current.x) * scaleX;
+    const endY = Number(current.y) * scaleY;
+    const distance = Math.hypot(endX - startX, endY - startY);
+    if (distance < 1) return;
+
+    const angle = Math.atan2(endY - startY, endX - startX);
+    const handleT = (stepSpeed - minSpeed) / (maxSpeed - minSpeed);
+    const tether = document.createElement('div');
+    tether.id = `playbook-speed-tether-${tokenId}`;
+    tether.className = 'playbook-speed-tether';
+    tether.style.left = `${startX}px`;
+    tether.style.top = `${startY}px`;
+    tether.style.width = `${distance}px`;
+    tether.style.transform = `rotate(${angle}rad)`;
+
+    const hitbox = document.createElement('div');
+    hitbox.className = 'playbook-speed-tether-hitbox';
+    tether.appendChild(hitbox);
+
+    const line = document.createElement('div');
+    line.className = 'playbook-speed-tether-line';
+    tether.appendChild(line);
+
+    const ghost = makePlaybookGhostCopy(document.getElementById('token-' + tokenId), origin);
     tether.appendChild(ghost);
-  }
 
-  const handle = document.createElement('button');
-  handle.type = 'button';
-  handle.className = 'playbook-speed-tether-handle';
-  handle.style.left = `${distance * Math.max(0, Math.min(1, handleT))}px`;
-  handle.title = 'Drag to change speed';
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'playbook-speed-tether-handle';
+    handle.style.left = `${distance * Math.max(0, Math.min(1, handleT))}px`;
+    handle.title = 'Drag to change speed';
 
-  const updateSpeedFromPointer = (clientX, clientY) => {
-    const rect2 = canvasStack.getBoundingClientRect();
-    const localX = clientX - rect2.left;
-    const localY = clientY - rect2.top;
-    const dx = endX - startX;
-    const dy = endY - startY;
-    const projected = ((localX - startX) * dx + (localY - startY) * dy) / (distance ** 2);
-    const clamped = Math.max(0, Math.min(1, projected));
-    const newSpeed = minSpeed + (maxSpeed - minSpeed) * clamped;
-    step.speed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
-    renderPlaybookDraftList();
-  };
+    const syncHandle = () => {
+      handle.style.left = `${distance * Math.max(0, Math.min(1, (step.speed - minSpeed) / (maxSpeed - minSpeed)))}px`;
+    };
 
-  handle.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    handle.setPointerCapture(e.pointerId);
-    _playbookSpeedDrag = { stepIndex: _selectedDraftStepIndex };
-  });
-  handle.addEventListener('pointermove', e => {
-    if (!_playbookSpeedDrag || _playbookSpeedDrag.stepIndex !== _selectedDraftStepIndex) return;
-    updateSpeedFromPointer(e.clientX, e.clientY);
-    renderPlaybookSpeedTether();
-  });
-  handle.addEventListener('pointerup', e => {
-    if (_playbookSpeedDrag && _playbookSpeedDrag.stepIndex === _selectedDraftStepIndex) {
+    const updateSpeedFromPointer = (clientX, clientY) => {
+      const rect2 = canvasStack.getBoundingClientRect();
+      const localX = clientX - rect2.left;
+      const localY = clientY - rect2.top;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      const projected = ((localX - startX) * dx + (localY - startY) * dy) / (distance ** 2);
+      const clamped = Math.max(0, Math.min(1, projected));
+      const newSpeed = minSpeed + (maxSpeed - minSpeed) * clamped;
+      step.speed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
+      syncHandle();
+    };
+
+    const beginDrag = (e, captureEl) => {
+      e.preventDefault();
+      e.stopPropagation();
+      captureEl.setPointerCapture(e.pointerId);
+      _playbookSpeedDrag = { stepIndex: _selectedDraftStepIndex, pointerId: e.pointerId };
+      updateSpeedFromPointer(e.clientX, e.clientY);
+    };
+
+    hitbox.addEventListener('pointerdown', e => beginDrag(e, hitbox));
+    handle.addEventListener('pointerdown', e => beginDrag(e, handle));
+
+    const moveDrag = (e) => {
+      if (!_playbookSpeedDrag || _playbookSpeedDrag.stepIndex !== _selectedDraftStepIndex) return;
+      if (_playbookSpeedDrag.pointerId !== e.pointerId) return;
+      updateSpeedFromPointer(e.clientX, e.clientY);
+    };
+
+    const endDrag = (e) => {
+      if (!_playbookSpeedDrag || _playbookSpeedDrag.stepIndex !== _selectedDraftStepIndex) return;
+      if (_playbookSpeedDrag.pointerId !== e.pointerId) return;
       updateSpeedFromPointer(e.clientX, e.clientY);
       _playbookSpeedDrag = null;
+      renderPlaybookDraftList();
       renderPlaybookSpeedTether();
-    }
-  });
-  handle.addEventListener('pointercancel', () => {
-    _playbookSpeedDrag = null;
-    renderPlaybookSpeedTether();
-  });
+    };
 
-  tether.appendChild(handle);
+    handle.addEventListener('pointermove', moveDrag);
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+    handle.addEventListener('lostpointercapture', endDrag);
+    hitbox.addEventListener('pointermove', moveDrag);
+    hitbox.addEventListener('pointerup', endDrag);
+    hitbox.addEventListener('pointercancel', endDrag);
 
-  cursorLayer.appendChild(tether);
+    tether.appendChild(handle);
+    cursorLayer.appendChild(tether);
+  });
 }
 
 function resetPlaybookAnimationSchedule() {
