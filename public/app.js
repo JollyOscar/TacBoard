@@ -33,6 +33,7 @@ const roomLockBtn = document.getElementById('room-lock-btn');
 const leaveRoomBtn = document.getElementById('leave-room-btn');
 const closeRoomBtn = document.getElementById('close-room-btn');
 const playbookBuilderBar = document.getElementById('playbook-builder-bar');
+const playbookStepStripEl = document.getElementById('playbook-step-strip');
 const playbookDraftNameInput = document.getElementById('playbook-draft-name-input');
 const playbookDraftStatusEl = document.getElementById('playbook-draft-status');
 const playbookBuilderCaptureBtn = document.getElementById('playbook-builder-capture-btn');
@@ -2018,6 +2019,36 @@ function syncDraftNameInput() {
   playbookDraftNameInput.value = _draftPlaybookName;
 }
 
+function renderPlaybookStepStrip() {
+  if (!playbookStepStripEl) return;
+  if (!_draftPlaybookSteps.length) {
+    playbookStepStripEl.innerHTML = '<div class="playbook-step-strip-empty">Captured steps appear here</div>';
+    return;
+  }
+
+  playbookStepStripEl.innerHTML = '';
+  _draftPlaybookSteps.forEach((step, idx) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'playbook-step-chip' + (idx === _selectedDraftStepIndex ? ' selected' : '');
+    chip.dataset.stepIndex = idx;
+    const tokenCount = Object.keys(step.tokens || {}).length;
+    chip.innerHTML = `
+      <span class="playbook-step-chip-number">${idx + 1}</span>
+      <span class="playbook-step-chip-name">${escHtml(step.name)}</span>
+      <span class="playbook-step-chip-meta">${tokenCount} tok · ${Math.max(250, Math.min(10000, Number(step.duration) || 1200))}ms</span>
+    `;
+    chip.title = `Step ${idx + 1}: ${step.name}`;
+    chip.addEventListener('click', () => {
+      _selectedDraftStepIndex = idx;
+      renderPlaybookDraftList();
+      renderPlaybookStepStrip();
+      renderPlaybookSpeedTether();
+    });
+    playbookStepStripEl.appendChild(chip);
+  });
+}
+
 function setPlaybookDraftMode(active) {
   _isPlaybookDraftMode = !!active;
   if (!playbookBuilderBar) return;
@@ -2028,6 +2059,7 @@ function setPlaybookDraftMode(active) {
   }
   updatePlaybookDraftStatus();
   syncDraftNameInput();
+  renderPlaybookStepStrip();
 }
 
 function clearPlaybookGhosts() {
@@ -2231,6 +2263,7 @@ function captureDraftStep(stepName = null) {
   _selectedDraftStepIndex = _draftPlaybookSteps.length - 1;
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
+  renderPlaybookStepStrip();
   renderPlaybookSpeedTether();
   toast(`➕ Captured ${escHtml(safeName)}`);
 }
@@ -2239,6 +2272,7 @@ function clearDraftStepsWithFeedback() {
   _draftPlaybookSteps = [];
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
+  renderPlaybookStepStrip();
   toast('🧹 Draft cleared');
 }
 
@@ -2263,6 +2297,7 @@ function saveDraftPlaybook() {
   updatePlaybookDraftStatus();
   syncDraftNameInput();
   renderPlaybookDraftList();
+  renderPlaybookStepStrip();
   toast('💾 Playbook saved');
 }
 
@@ -2452,6 +2487,7 @@ function renderPlaybookDraftList() {
     list.innerHTML = '<li class="no-playbooks">No draft steps yet</li>';
     removePlaybookSpeedTether();
     _selectedDraftStepIndex = -1;
+    renderPlaybookStepStrip();
     return;
   }
 
@@ -2537,6 +2573,7 @@ function renderPlaybookDraftList() {
     info.addEventListener('click', () => {
       _selectedDraftStepIndex = +info.closest('.playbook-step-item')?.dataset.stepIndex;
       renderPlaybookDraftList();
+      renderPlaybookStepStrip();
       renderPlaybookSpeedTether();
     });
   });
@@ -2548,10 +2585,12 @@ function renderPlaybookDraftList() {
       if (_selectedDraftStepIndex === i) _selectedDraftStepIndex = -1;
       if (_selectedDraftStepIndex > i) _selectedDraftStepIndex -= 1;
       renderPlaybookDraftList();
+      renderPlaybookStepStrip();
       renderPlaybookSpeedTether();
     });
   });
 
+  renderPlaybookStepStrip();
   renderPlaybookSpeedTether();
 }
 
