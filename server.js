@@ -504,7 +504,7 @@ function sanitizeTokenForPlaybook(token) {
 function normalizePlaybookSteps(steps) {
   if (!Array.isArray(steps)) return [];
   return steps.slice(0, 200).map((step, idx) => {
-    const safeDuration = Math.max(150, Math.min(10000, Number(step.duration) || 1200));
+    const safeDuration = Math.max(250, Math.min(10000, Number(step.duration) || 1200));
     const safeName = (step.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
     const tokensArr = Array.isArray(step.targets)
       ? step.targets
@@ -637,6 +637,9 @@ function startPlaybook(roomId, playbook) {
   const room = getRoom(roomId);
   stopPlaybook(roomId, false);
 
+  const PLAYBOOK_STEP_LEAD_MS = 220;
+  const PLAYBOOK_STEP_GAP_MS = 80;
+
   room.play.active = true;
   room.play.playbookId = playbook.id;
   room.play.stepIndex = 0;
@@ -653,9 +656,12 @@ function startPlaybook(roomId, playbook) {
     stepCount: steps.length
   });
 
+  const baseStartAt = Date.now() + PLAYBOOK_STEP_LEAD_MS;
   let offset = 0;
   steps.forEach((step, idx) => {
-    const duration = Math.max(150, Number(step.duration) || 1200);
+    const duration = Math.max(250, Number(step.duration) || 1200);
+    const stepStartAt = baseStartAt + offset;
+    const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
 
     const stepTimer = setTimeout(() => {
       if (!room.play.active || room.play.playbookId !== playbook.id) return;
@@ -667,7 +673,7 @@ function startPlaybook(roomId, playbook) {
         stepIndex: idx,
         stepName: step.name,
         duration,
-        startAt: Date.now() + 80,
+        startAt: stepStartAt,
         targets: Object.values(step.tokens || {})
       });
 
@@ -679,13 +685,13 @@ function startPlaybook(roomId, playbook) {
           room.play.playbookId = null;
           room.play.stepIndex = 0;
           io.to(roomId).emit('playbook-finished', { playbookId: playbook.id });
-        }, duration + 100);
+        }, duration + PLAYBOOK_STEP_GAP_MS + 120);
         room.play.timeoutIds.push(doneTimer);
       }
-    }, offset);
+    }, emitIn);
 
     room.play.timeoutIds.push(stepTimer);
-    offset += duration;
+    offset += duration + PLAYBOOK_STEP_GAP_MS;
   });
 }
 

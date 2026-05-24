@@ -157,6 +157,19 @@
     <!-- Board area -->
     <main id="board-wrap">
 
+      <!-- Playbook draft builder bar -->
+      <div id="playbook-builder-bar" class="hidden">
+        <div class="playbook-builder-title">Play Draft</div>
+        <input id="playbook-draft-name-input" type="text" maxlength="80" placeholder="Play name..." />
+        <span id="playbook-draft-status">0 steps</span>
+        <button id="playbook-builder-capture-btn" class="action-btn" title="Capture current token positions as next step">Capture Step</button>
+        <button id="playbook-builder-preview-btn" class="action-btn" title="Preview last captured step">Preview Last</button>
+        <button id="playbook-builder-undo-btn" class="action-btn" title="Remove last captured step">Undo Step</button>
+        <button id="playbook-builder-save-btn" class="action-btn" title="Save this playbook">Save Play</button>
+        <button id="playbook-builder-clear-btn" class="action-btn danger" title="Clear all draft steps">Clear</button>
+        <button id="playbook-builder-exit-btn" class="action-btn" title="Exit draft mode">Done</button>
+      </div>
+
       <!-- Room badge -->
       <div id="room-badge" title="Current room">🏠 lobby</div>
 

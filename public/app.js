@@ -30,6 +30,15 @@ const toastContainer= document.getElementById('toast-container');
 const ownEraseCheck = document.getElementById('own-erase-check');
 const arrowDashedCheck = document.getElementById('arrow-dashed-check');
 const roomLockBtn = document.getElementById('room-lock-btn');
+const playbookBuilderBar = document.getElementById('playbook-builder-bar');
+const playbookDraftNameInput = document.getElementById('playbook-draft-name-input');
+const playbookDraftStatusEl = document.getElementById('playbook-draft-status');
+const playbookBuilderCaptureBtn = document.getElementById('playbook-builder-capture-btn');
+const playbookBuilderPreviewBtn = document.getElementById('playbook-builder-preview-btn');
+const playbookBuilderUndoBtn = document.getElementById('playbook-builder-undo-btn');
+const playbookBuilderSaveBtn = document.getElementById('playbook-builder-save-btn');
+const playbookBuilderClearBtn = document.getElementById('playbook-builder-clear-btn');
+const playbookBuilderExitBtn = document.getElementById('playbook-builder-exit-btn');
 
 // ── State ─────────────────────────────────────────────────────
 let socket;
@@ -1356,6 +1365,7 @@ function connectSocket(username) {
 
   socket.on('playbook-started', ({ name }) => {
     isPlaybookPlaying = true;
+    resetPlaybookAnimationSchedule();
     liveCanvas.style.pointerEvents = 'none';
     toast(`▶ Playbook running: ${escHtml(name)}`);
   });
@@ -1363,14 +1373,13 @@ function connectSocket(username) {
   socket.on('playbook-step', ({ targets, duration, startAt }) => {
     isPlaybookPlaying = true;
     liveCanvas.style.pointerEvents = 'none';
-    animateTokensToTargets(targets || [], Number(duration) || 1200, Number(startAt) || Date.now());
+    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now());
   });
 
   const onPlaybookDone = () => {
     isPlaybookPlaying = false;
     if (!isReplaying) liveCanvas.style.pointerEvents = '';
-    cancelAnimationFrame(_playbookAnimRaf);
-    _playbookAnimRaf = null;
+    resetPlaybookAnimationSchedule();
     toast('⏹ Playbook playback ended');
   };
 
@@ -1840,12 +1849,16 @@ let _playbooks = [];
 let _selectedPlaybookId = null;
 let _draftPlaybookSteps = [];
 let _playbookAnimRaf = null;
+let _playbookStepStartTimers = [];
+let _playbookAnimBusyUntil = 0;
+let _isPlaybookDraftMode = false;
+let _draftPlaybookName = '';
 
 function normalizeImportedPlaybookSteps(rawSteps) {
   if (!Array.isArray(rawSteps)) return [];
   return rawSteps.slice(0, 200).map((step, idx) => {
     const name = (step?.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
-    const duration = Math.max(150, Math.min(10000, Number(step?.duration) || 1200));
+    const duration = Math.max(250, Math.min(10000, Number(step?.duration) || 1200));
     const sourceTokens = Array.isArray(step?.targets)
       ? step.targets
       : Object.values(step?.tokens || {});
@@ -1881,6 +1894,96 @@ function snapshotTokensForStep() {
     };
   });
   return out;
+}
+
+function updatePlaybookDraftStatus() {
+  if (!playbookDraftStatusEl) return;
+  const stepCount = _draftPlaybookSteps.length;
+  playbookDraftStatusEl.textContent = `${stepCount} step${stepCount === 1 ? '' : 's'}`;
+}
+
+function syncDraftNameInput() {
+  if (!playbookDraftNameInput) return;
+  playbookDraftNameInput.value = _draftPlaybookName;
+}
+
+function setPlaybookDraftMode(active) {
+  _isPlaybookDraftMode = !!active;
+  if (!playbookBuilderBar) return;
+  if (_isPlaybookDraftMode) {
+    playbookBuilderBar.classList.remove('hidden');
+  } else {
+    playbookBuilderBar.classList.add('hidden');
+  }
+  updatePlaybookDraftStatus();
+  syncDraftNameInput();
+}
+
+function resetPlaybookAnimationSchedule() {
+  _playbookStepStartTimers.forEach(id => clearTimeout(id));
+  _playbookStepStartTimers = [];
+  _playbookAnimBusyUntil = 0;
+  cancelAnimationFrame(_playbookAnimRaf);
+  _playbookAnimRaf = null;
+}
+
+function schedulePlaybookAnimation(targets, duration, startAt) {
+  const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
+  const safeStartAt = Number(startAt) || Date.now();
+  const plannedStart = Math.max(Date.now() + 16, safeStartAt, _playbookAnimBusyUntil);
+  _playbookAnimBusyUntil = plannedStart + safeDuration;
+
+  const timerId = setTimeout(() => {
+    _playbookStepStartTimers = _playbookStepStartTimers.filter(id => id !== timerId);
+    animateTokensToTargets(targets || [], safeDuration, plannedStart);
+  }, Math.max(0, plannedStart - Date.now()));
+
+  _playbookStepStartTimers.push(timerId);
+}
+
+function captureDraftStep(stepName = null) {
+  const n = _draftPlaybookSteps.length + 1;
+  const defaultName = `Step ${n}`;
+  const safeName = (stepName || defaultName).toString().trim().substring(0, 60) || defaultName;
+  _draftPlaybookSteps.push({
+    name: safeName,
+    duration: 1200,
+    tokens: snapshotTokensForStep()
+  });
+  updatePlaybookDraftStatus();
+  renderPlaybookDraftList();
+  toast(`➕ Captured ${escHtml(safeName)}`);
+}
+
+function clearDraftStepsWithFeedback() {
+  _draftPlaybookSteps = [];
+  updatePlaybookDraftStatus();
+  renderPlaybookDraftList();
+  toast('🧹 Draft cleared');
+}
+
+function saveDraftPlaybook() {
+  if (!_draftPlaybookSteps.length) {
+    toast('⚠️ Add at least one step before saving');
+    return;
+  }
+  let name = (_draftPlaybookName || '').trim();
+  if (!name) {
+    name = prompt('Playbook name:', `Playbook ${new Date().toLocaleTimeString()}`)?.trim() || '';
+  }
+  if (!name) return;
+
+  socket?.emit('save-playbook', {
+    name: name.substring(0, 80),
+    steps: _draftPlaybookSteps
+  });
+
+  _draftPlaybookSteps = [];
+  _draftPlaybookName = '';
+  updatePlaybookDraftStatus();
+  syncDraftNameInput();
+  renderPlaybookDraftList();
+  toast('💾 Playbook saved');
 }
 
 function setTokenVisual(el, token) {
@@ -2004,6 +2107,7 @@ function animateTokensToTargets(targets, duration, startAt) {
 function renderPlaybookDraftList() {
   const list = document.getElementById('playbook-draft-list');
   if (!list) return;
+  updatePlaybookDraftStatus();
   if (!_draftPlaybookSteps.length) {
     list.innerHTML = '<li class="no-playbooks">No draft steps yet</li>';
     return;
@@ -2020,7 +2124,7 @@ function renderPlaybookDraftList() {
         <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration:</div>
       </div>
       <div class="playbook-step-actions">
-        <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="150" max="10000" value="${step.duration}" />
+        <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="250" max="10000" value="${step.duration}" />
         <button class="playbook-step-move" data-step-index="${idx}" data-dir="up" title="Move up">↑</button>
         <button class="playbook-step-move" data-step-index="${idx}" data-dir="down" title="Move down">↓</button>
         <button class="playbook-step-preview" data-step-index="${idx}" title="Preview this step">👁</button>
@@ -2034,7 +2138,7 @@ function renderPlaybookDraftList() {
     input.addEventListener('change', () => {
       const i = +input.dataset.stepIndex;
       if (!_draftPlaybookSteps[i]) return;
-      _draftPlaybookSteps[i].duration = Math.max(150, Math.min(10000, Number(input.value) || 1200));
+      _draftPlaybookSteps[i].duration = Math.max(250, Math.min(10000, Number(input.value) || 1200));
       input.value = _draftPlaybookSteps[i].duration;
     });
   });
@@ -2065,7 +2169,8 @@ function renderPlaybookDraftList() {
       const i = +btn.dataset.stepIndex;
       const step = _draftPlaybookSteps[i];
       if (!step) return;
-      animateTokensToTargets(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 40);
+      resetPlaybookAnimationSchedule();
+      schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60);
       toast(`👁 Previewing ${escHtml(step.name)}`);
     });
   });
@@ -2715,40 +2820,70 @@ document.addEventListener('keydown', (e) => {
 
 document.getElementById('playbook-new-draft-btn')?.addEventListener('click', () => {
   _draftPlaybookSteps = [];
+  _draftPlaybookName = `Playbook ${new Date().toLocaleTimeString()}`;
+  syncDraftNameInput();
+  updatePlaybookDraftStatus();
   renderPlaybookDraftList();
-  toast('📝 New playbook draft started');
+  setPlaybookDraftMode(true);
+  closeModal(playbooksModal);
+  toast('📝 Draft mode enabled. Move pieces and capture steps from the top bar.');
 });
 
 document.getElementById('playbook-capture-step-btn')?.addEventListener('click', () => {
   const n = _draftPlaybookSteps.length + 1;
   const stepName = prompt('Step name:', `Step ${n}`) || `Step ${n}`;
-  _draftPlaybookSteps.push({
-    name: stepName.trim().substring(0, 60) || `Step ${n}`,
-    duration: 1200,
-    tokens: snapshotTokensForStep()
-  });
-  renderPlaybookDraftList();
-  toast(`➕ Captured ${escHtml(stepName)} with current token positions`);
+  captureDraftStep(stepName);
 });
 
 document.getElementById('playbook-clear-draft-btn')?.addEventListener('click', () => {
-  _draftPlaybookSteps = [];
-  renderPlaybookDraftList();
+  clearDraftStepsWithFeedback();
 });
 
 document.getElementById('playbook-save-draft-btn')?.addEventListener('click', () => {
+  saveDraftPlaybook();
+});
+
+playbookDraftNameInput?.addEventListener('input', () => {
+  _draftPlaybookName = (playbookDraftNameInput.value || '').toString().substring(0, 80);
+});
+
+playbookBuilderCaptureBtn?.addEventListener('click', () => {
+  captureDraftStep();
+});
+
+playbookBuilderUndoBtn?.addEventListener('click', () => {
   if (!_draftPlaybookSteps.length) {
-    toast('⚠️ Add at least one step before saving');
+    toast('⚠️ No steps to undo');
     return;
   }
-  const name = prompt('Playbook name:', `Playbook ${new Date().toLocaleTimeString()}`);
-  if (!name || !name.trim()) return;
-  socket?.emit('save-playbook', {
-    name: name.trim(),
-    steps: _draftPlaybookSteps
-  });
-  _draftPlaybookSteps = [];
+  _draftPlaybookSteps.pop();
+  updatePlaybookDraftStatus();
   renderPlaybookDraftList();
+  toast('↩️ Removed last step');
+});
+
+playbookBuilderPreviewBtn?.addEventListener('click', () => {
+  const step = _draftPlaybookSteps[_draftPlaybookSteps.length - 1];
+  if (!step) {
+    toast('⚠️ Capture at least one step first');
+    return;
+  }
+  resetPlaybookAnimationSchedule();
+  schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60);
+  toast(`👁 Previewing ${escHtml(step.name)}`);
+});
+
+playbookBuilderClearBtn?.addEventListener('click', () => {
+  clearDraftStepsWithFeedback();
+});
+
+playbookBuilderSaveBtn?.addEventListener('click', () => {
+  saveDraftPlaybook();
+});
+
+playbookBuilderExitBtn?.addEventListener('click', () => {
+  setPlaybookDraftMode(false);
+  toast('✅ Draft mode closed');
 });
 
 document.getElementById('playbook-start-btn')?.addEventListener('click', () => {
@@ -2822,6 +2957,8 @@ playbookImportInput?.addEventListener('change', (e) => {
   reader.readAsText(file);
   e.target.value = '';
 });
+
+setPlaybookDraftMode(false);
 
 // ── Resize handling ───────────────────────────────────────────
 window.addEventListener('resize', () => {
