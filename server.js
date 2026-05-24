@@ -752,6 +752,7 @@ function startPlaybook(roomId, playbook) {
 
   const PLAYBOOK_STEP_LEAD_MS = 220;
   const PLAYBOOK_STEP_GAP_MS = 80;
+  const PLAYBOOK_FIRST_ALIGN_MS = 90;
 
   room.play.active = true;
   room.play.playbookId = playbook.id;
@@ -773,7 +774,11 @@ function startPlaybook(roomId, playbook) {
   let offset = 0;
   let simulatedTokens = JSON.parse(JSON.stringify(room.tokens || {}));
   steps.forEach((step, idx) => {
-    const duration = getPlaybookStepTravelDurationForTokens(simulatedTokens, step);
+    const calculatedDuration = getPlaybookStepTravelDurationForTokens(simulatedTokens, step);
+    const instantStart = idx === 0;
+    const duration = instantStart
+      ? Math.min(calculatedDuration, PLAYBOOK_FIRST_ALIGN_MS)
+      : calculatedDuration;
     const stepSpeed = Math.max(40, Number(step.speed) || 260);
     const stepStartAt = baseStartAt + offset;
     const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
@@ -789,6 +794,7 @@ function startPlaybook(roomId, playbook) {
         stepName: step.name,
         duration,
         stepSpeed,
+        instantStart,
         startAt: stepStartAt,
         targets: Object.values(step.tokens || {})
       });

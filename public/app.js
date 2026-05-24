@@ -37,6 +37,7 @@ const playbookStepStripEl = document.getElementById('playbook-step-strip');
 const playbookDraftNameInput = document.getElementById('playbook-draft-name-input');
 const playbookDraftStatusEl = document.getElementById('playbook-draft-status');
 const playbookBuilderCaptureBtn = document.getElementById('playbook-builder-capture-btn');
+const playbookBuilderPlayBtn = document.getElementById('playbook-builder-play-btn');
 const playbookBuilderUndoBtn = document.getElementById('playbook-builder-undo-btn');
 const playbookBuilderSaveBtn = document.getElementById('playbook-builder-save-btn');
 const playbookBuilderClearBtn = document.getElementById('playbook-builder-clear-btn');
@@ -1410,19 +1411,20 @@ function connectSocket(username) {
     toast(`▶ Playbook running: ${escHtml(name)}`);
   });
 
-  socket.on('playbook-step', ({ targets, duration, startAt, stepSpeed }) => {
+  socket.on('playbook-step', ({ targets, duration, startAt, stepSpeed, instantStart }) => {
     isPlaybookPlaying = true;
+    _isLocalDraftPlayback = false;
     liveCanvas.style.pointerEvents = 'none';
-    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now(), stepSpeed);
+    schedulePlaybookAnimation(
+      targets || [],
+      Number(duration) || 1200,
+      Number(startAt) || Date.now(),
+      stepSpeed,
+      { instantStart: !!instantStart }
+    );
   });
 
-  const onPlaybookDone = () => {
-    isPlaybookPlaying = false;
-    if (!isReplaying) liveCanvas.style.pointerEvents = '';
-    resetPlaybookAnimationSchedule();
-    clearPlaybookGhosts();
-    toast('⏹ Playbook playback ended');
-  };
+  const onPlaybookDone = () => finishPlaybookPlayback('⏹ Playbook playback ended');
 
   socket.on('playbook-finished', onPlaybookDone);
   socket.on('playbook-stopped', onPlaybookDone);
@@ -1915,6 +1917,7 @@ let _selectedDraftStepIndex = -1;
 let _playbookGhostNodes = [];
 let _playbookSpeedDrag = null;
 let _playbookSpeedTetherNodes = new Map();
+let _isLocalDraftPlayback = false;
 const DEFAULT_PLAYBOOK_TOKEN_SPEED = 260;
 const DEFAULT_PLAYBOOK_STEP_SPEED = 260;
 
@@ -2261,14 +2264,15 @@ function resetPlaybookAnimationSchedule() {
   _playbookAnimRaf = null;
 }
 
-function estimatePlaybookMotionDuration(targets, duration, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
+function estimatePlaybookMotionDurationFromState(fromTokens, targets, duration, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, instantStart = false) {
+  if (instantStart) return 90;
   const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
   const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
   let maxTravelDuration = safeDuration;
 
   (targets || []).forEach((t) => {
     if (!t?.id) return;
-    const from = tokens[t.id];
+    const from = fromTokens?.[t.id];
     if (!from) return;
     const dx = (Number(t.x) || 0) - (Number(from.x) || 0);
     const dy = (Number(t.y) || 0) - (Number(from.y) || 0);
@@ -2284,20 +2288,87 @@ function estimatePlaybookMotionDuration(targets, duration, stepSpeed = DEFAULT_P
   return maxTravelDuration;
 }
 
-function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
-  const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
+function estimatePlaybookMotionDuration(targets, duration, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, instantStart = false) {
+  return estimatePlaybookMotionDurationFromState(tokens, targets, duration, stepSpeed, instantStart);
+}
+
+function finishPlaybookPlayback(message = '⏹ Playbook playback ended') {
+  isPlaybookPlaying = false;
+  _isLocalDraftPlayback = false;
+  if (!isReplaying) liveCanvas.style.pointerEvents = '';
+  resetPlaybookAnimationSchedule();
+  clearPlaybookGhosts();
+  renderPlaybookSpeedTether();
+  toast(message);
+}
+
+function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
+  const instantStart = !!options.instantStart;
+  const minDuration = instantStart ? 40 : 250;
+  const safeDuration = Math.max(minDuration, Math.min(10000, Number(duration) || 1200));
   const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
-  const completionDuration = estimatePlaybookMotionDuration(targets || [], safeDuration, safeStepSpeed);
+  const completionDuration = estimatePlaybookMotionDuration(targets || [], safeDuration, safeStepSpeed, instantStart);
   const safeStartAt = Number(startAt) || Date.now();
   const plannedStart = Math.max(Date.now() + 16, safeStartAt, _playbookAnimBusyUntil);
   _playbookAnimBusyUntil = plannedStart + completionDuration;
 
   const timerId = setTimeout(() => {
     _playbookStepStartTimers = _playbookStepStartTimers.filter(id => id !== timerId);
-    animateTokensToTargets(targets || [], completionDuration, plannedStart, safeStepSpeed);
+    animateTokensToTargets(targets || [], completionDuration, plannedStart, safeStepSpeed, { instantStart });
   }, Math.max(0, plannedStart - Date.now()));
 
   _playbookStepStartTimers.push(timerId);
+}
+
+function playCurrentDraft() {
+  if (!_draftPlaybookSteps.length) {
+    toast('⚠️ Add at least one draft step first');
+    return;
+  }
+
+  const DRAFT_STEP_LEAD_MS = 80;
+  const DRAFT_STEP_GAP_MS = 80;
+  resetPlaybookAnimationSchedule();
+  clearPlaybookGhosts();
+  removePlaybookSpeedTether();
+  isPlaybookPlaying = true;
+  _isLocalDraftPlayback = true;
+  liveCanvas.style.pointerEvents = 'none';
+
+  const baseStartAt = Date.now() + DRAFT_STEP_LEAD_MS;
+  let offset = 0;
+  let simulatedTokens = JSON.parse(JSON.stringify(tokens || {}));
+
+  _draftPlaybookSteps.forEach((step, idx) => {
+    const stepTargets = Object.values(step.tokens || {});
+    const stepSpeed = getPlaybookStepBaseSpeed(step);
+    const isFirstAlignment = idx === 0;
+    const duration = estimatePlaybookMotionDurationFromState(
+      simulatedTokens,
+      stepTargets,
+      Number(step.duration) || 1200,
+      stepSpeed,
+      isFirstAlignment
+    );
+    const stepStartAt = baseStartAt + offset;
+
+    const timerId = setTimeout(() => {
+      if (!isPlaybookPlaying || !_isLocalDraftPlayback) return;
+      schedulePlaybookAnimation(stepTargets, duration, stepStartAt, stepSpeed, { instantStart: isFirstAlignment });
+    }, Math.max(0, stepStartAt - Date.now() - DRAFT_STEP_LEAD_MS));
+
+    _playbookStepStartTimers.push(timerId);
+    offset += duration + DRAFT_STEP_GAP_MS;
+    simulatedTokens = JSON.parse(JSON.stringify(step.tokens || {}));
+  });
+
+  const doneTimer = setTimeout(() => {
+    if (!isPlaybookPlaying || !_isLocalDraftPlayback) return;
+    finishPlaybookPlayback('⏹ Draft playback ended');
+  }, offset + DRAFT_STEP_LEAD_MS + 120);
+  _playbookStepStartTimers.push(doneTimer);
+
+  toast(`▶ Playing draft: ${escHtml((_draftPlaybookName || 'WIP Play').trim() || 'WIP Play')}`);
 }
 
 function captureDraftStep(stepName = null) {
@@ -2404,7 +2475,8 @@ function ensureTokenLocal(tokenData) {
   positionToken(el, tokens[tokenData.id].x, tokens[tokenData.id].y);
 }
 
-function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
+function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
+  const instantStart = !!options.instantStart;
   const targetMap = {};
   (targets || []).forEach(t => {
     if (!t?.id) return;
@@ -2446,6 +2518,24 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     return { to, from, startX, startY, endX, endY, distance, speed, travelDuration };
   });
   const completionDuration = Math.max(duration, ...targetMeta.map(meta => meta.travelDuration));
+
+  if (instantStart) {
+    Object.values(targetMap).forEach(to => {
+      const token = tokens[to.id];
+      if (!token) return;
+      token.x = to.x;
+      token.y = to.y;
+      const el = document.getElementById('token-' + to.id);
+      if (el) positionToken(el, token.x, token.y);
+    });
+
+    removeIds.forEach(id => {
+      delete tokens[id];
+      const el = document.getElementById('token-' + id);
+      if (el) el.remove();
+    });
+    return;
+  }
 
   targetMeta.forEach(meta => {
     const { to, startX, startY, endX, endY, distance } = meta;
@@ -3271,6 +3361,10 @@ document.getElementById('playbook-capture-step-btn')?.addEventListener('click', 
   captureDraftStep(stepName);
 });
 
+document.getElementById('playbook-play-draft-btn')?.addEventListener('click', () => {
+  playCurrentDraft();
+});
+
 document.getElementById('playbook-clear-draft-btn')?.addEventListener('click', () => {
   clearDraftStepsWithFeedback();
 });
@@ -3285,6 +3379,10 @@ playbookDraftNameInput?.addEventListener('input', () => {
 
 playbookBuilderCaptureBtn?.addEventListener('click', () => {
   captureDraftStep();
+});
+
+playbookBuilderPlayBtn?.addEventListener('click', () => {
+  playCurrentDraft();
 });
 
 playbookBuilderUndoBtn?.addEventListener('click', () => {
