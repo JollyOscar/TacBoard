@@ -2581,7 +2581,6 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     const travelDuration = Math.max(250, Math.ceil((distance / speed) * 1000));
     return { to, from, startX, startY, endX, endY, distance, speed, travelDuration };
   });
-  });
   const completionDuration = Math.max(duration, ...targetMeta.map(meta => meta.travelDuration));
 
   const targetArrowsMeta = (arrows || []).map(a => {
