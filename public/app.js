@@ -36,7 +36,6 @@ const playbookBuilderBar = document.getElementById('playbook-builder-bar');
 const playbookDraftNameInput = document.getElementById('playbook-draft-name-input');
 const playbookDraftStatusEl = document.getElementById('playbook-draft-status');
 const playbookBuilderCaptureBtn = document.getElementById('playbook-builder-capture-btn');
-const playbookBuilderPreviewBtn = document.getElementById('playbook-builder-preview-btn');
 const playbookBuilderUndoBtn = document.getElementById('playbook-builder-undo-btn');
 const playbookBuilderSaveBtn = document.getElementById('playbook-builder-save-btn');
 const playbookBuilderClearBtn = document.getElementById('playbook-builder-clear-btn');
@@ -879,6 +878,7 @@ function createTokenEl(token) {
       socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
       _lastTokenEmit = now;
     }
+    renderPlaybookSpeedTether();
     e.stopPropagation();
   });
   el.addEventListener('pointerup', e => {
@@ -887,6 +887,7 @@ function createTokenEl(token) {
     el.classList.remove('dragging');
     // Emit final position on pointer up to ensure sync
     socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+    renderPlaybookSpeedTether();
     e.stopPropagation();
   });
 
@@ -1899,6 +1900,7 @@ let _isPlaybookDraftMode = false;
 let _draftPlaybookName = '';
 let _selectedDraftStepIndex = -1;
 let _playbookGhostNodes = [];
+let _playbookSpeedDrag = null;
 
 function normalizeImportedPlaybookSteps(rawSteps) {
   if (!Array.isArray(rawSteps)) return [];
@@ -2018,6 +2020,10 @@ function renderPlaybookSpeedTether() {
   if (distance < 1) return;
 
   const angle = Math.atan2(endY - startY, endX - startX);
+  const minSpeed = 40;
+  const maxSpeed = 2000;
+  const stepSpeed = Math.max(minSpeed, Math.min(maxSpeed, Number(step.speed) || 260));
+  const handleT = (stepSpeed - minSpeed) / (maxSpeed - minSpeed);
   const tether = document.createElement('div');
   tether.id = 'playbook-speed-tether';
   tether.className = 'playbook-speed-tether';
@@ -2030,27 +2036,61 @@ function renderPlaybookSpeedTether() {
   line.className = 'playbook-speed-tether-line';
   tether.appendChild(line);
 
-  [0.25, 0.5, 0.75].forEach(fraction => {
-    const dot = document.createElement('span');
-    dot.className = 'playbook-speed-tether-dot';
-    dot.style.left = `${distance * fraction}px`;
-    tether.appendChild(dot);
-  });
-
   const ghost = document.getElementById('token-' + tokenId)?.cloneNode(true);
   if (ghost) {
     ghost.classList.add('playbook-speed-tether-ghost');
+    ghost.classList.remove('pop-in', 'dragging');
+    ghost.querySelector('.token-delete')?.remove();
     ghost.style.left = '0';
     ghost.style.top = '0';
     ghost.style.transform = 'translate(-50%, -50%)';
-    ghost.style.opacity = '0.34';
+    ghost.style.opacity = '0.78';
     tether.appendChild(ghost);
   }
 
-  const marker = document.createElement('span');
-  marker.className = 'playbook-speed-tether-marker';
-  marker.style.left = `${distance}px`;
-  tether.appendChild(marker);
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'playbook-speed-tether-handle';
+  handle.style.left = `${distance * Math.max(0, Math.min(1, handleT))}px`;
+  handle.title = 'Drag to change speed';
+
+  const updateSpeedFromPointer = (clientX, clientY) => {
+    const rect2 = canvasStack.getBoundingClientRect();
+    const localX = clientX - rect2.left;
+    const localY = clientY - rect2.top;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const projected = ((localX - startX) * dx + (localY - startY) * dy) / (distance ** 2);
+    const clamped = Math.max(0, Math.min(1, projected));
+    const newSpeed = minSpeed + (maxSpeed - minSpeed) * clamped;
+    step.speed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
+    renderPlaybookDraftList();
+  };
+
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    _playbookSpeedDrag = { stepIndex: _selectedDraftStepIndex };
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!_playbookSpeedDrag || _playbookSpeedDrag.stepIndex !== _selectedDraftStepIndex) return;
+    updateSpeedFromPointer(e.clientX, e.clientY);
+    renderPlaybookSpeedTether();
+  });
+  handle.addEventListener('pointerup', e => {
+    if (_playbookSpeedDrag && _playbookSpeedDrag.stepIndex === _selectedDraftStepIndex) {
+      updateSpeedFromPointer(e.clientX, e.clientY);
+      _playbookSpeedDrag = null;
+      renderPlaybookSpeedTether();
+    }
+  });
+  handle.addEventListener('pointercancel', () => {
+    _playbookSpeedDrag = null;
+    renderPlaybookSpeedTether();
+  });
+
+  tether.appendChild(handle);
 
   cursorLayer.appendChild(tether);
 }
@@ -2086,8 +2126,10 @@ function captureDraftStep(stepName = null) {
     duration: 1200,
     tokens: snapshotTokensForStep()
   });
+  _selectedDraftStepIndex = _draftPlaybookSteps.length - 1;
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
+  renderPlaybookSpeedTether();
   toast(`➕ Captured ${escHtml(safeName)}`);
 }
 
@@ -2315,7 +2357,6 @@ function renderPlaybookDraftList() {
         <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="250" max="10000" value="${step.duration}" />
         <button class="playbook-step-move" data-step-index="${idx}" data-dir="up" title="Move up">↑</button>
         <button class="playbook-step-move" data-step-index="${idx}" data-dir="down" title="Move down">↓</button>
-        <button class="playbook-step-preview" data-step-index="${idx}" title="Preview this step">👁</button>
         <button class="playbook-step-delete" data-step-index="${idx}" title="Delete step">×</button>
       </div>
     `;
@@ -2352,35 +2393,6 @@ function renderPlaybookDraftList() {
       if (_selectedDraftStepIndex > i) _selectedDraftStepIndex -= 1;
       renderPlaybookDraftList();
       renderPlaybookSpeedTether();
-    });
-  });
-
-  list.querySelectorAll('.playbook-step-move').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = +btn.dataset.stepIndex;
-      const dir = btn.dataset.dir;
-      const j = dir === 'up' ? i - 1 : i + 1;
-      if (i < 0 || j < 0 || i >= _draftPlaybookSteps.length || j >= _draftPlaybookSteps.length) return;
-      const tmp = _draftPlaybookSteps[i];
-      _draftPlaybookSteps[i] = _draftPlaybookSteps[j];
-      _draftPlaybookSteps[j] = tmp;
-      if (_selectedDraftStepIndex === i) _selectedDraftStepIndex = j;
-      else if (_selectedDraftStepIndex === j) _selectedDraftStepIndex = i;
-      renderPlaybookDraftList();
-      renderPlaybookSpeedTether();
-    });
-  });
-
-  list.querySelectorAll('.playbook-step-preview').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = +btn.dataset.stepIndex;
-      const step = _draftPlaybookSteps[i];
-      if (!step) return;
-      _selectedDraftStepIndex = i;
-      renderPlaybookDraftList();
-      resetPlaybookAnimationSchedule();
-      schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60, step.speed);
-      toast(`👁 Previewing ${escHtml(step.name)}`);
     });
   });
 
@@ -3071,17 +3083,6 @@ playbookBuilderUndoBtn?.addEventListener('click', () => {
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
   toast('↩️ Removed last step');
-});
-
-playbookBuilderPreviewBtn?.addEventListener('click', () => {
-  const step = _draftPlaybookSteps[_draftPlaybookSteps.length - 1];
-  if (!step) {
-    toast('⚠️ Capture at least one step first');
-    return;
-  }
-  resetPlaybookAnimationSchedule();
-  schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60);
-  toast(`👁 Previewing ${escHtml(step.name)}`);
 });
 
 playbookBuilderClearBtn?.addEventListener('click', () => {
