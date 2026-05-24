@@ -119,23 +119,9 @@
 
       <div class="tool-divider"></div>
 
-      <!-- Recordings button -->
+      <!-- Library button -->
       <div class="tool-group">
-        <button id="open-recordings-btn" class="action-btn" title="View and manage recordings">⏺ Recordings</button>
-      </div>
-
-      <div class="tool-divider"></div>
-
-      <!-- Board Presets button -->
-      <div class="tool-group">
-        <button id="open-presets-btn" class="action-btn" title="View and manage board presets">💾 Presets</button>
-      </div>
-
-      <div class="tool-divider"></div>
-
-      <!-- Playbooks button -->
-      <div class="tool-group">
-        <button id="open-playbooks-btn" class="action-btn" title="Create and run multi-step simultaneous token plays">📚 Plays</button>
+        <button id="open-library-btn" class="action-btn" title="Library: Plays, Presets, Recordings">📚 Library</button>
       </div>
 
       <div class="tool-divider"></div>
@@ -168,7 +154,7 @@
         <button id="playbook-builder-capture-btn" class="action-btn" title="Capture current token positions as next step">Capture Step</button>
         <button id="playbook-builder-play-btn" class="action-btn" title="Play current draft steps without saving">Play WIP</button>
         <button id="playbook-builder-undo-btn" class="action-btn" title="Remove last captured step">Undo Step</button>
-        <button id="playbook-builder-save-btn" class="action-btn" title="Save this playbook">Save Play</button>
+        <button id="playbook-builder-save-btn" class="action-btn primary" title="Save this playbook">💾 Save Play</button>
         <button id="playbook-builder-clear-btn" class="action-btn danger" title="Clear all draft steps">Clear</button>
         <button id="playbook-builder-exit-btn" class="action-btn" title="Exit draft mode">Done</button>
       </div>
@@ -240,78 +226,70 @@
     </div>
   </div>
 
-  <!-- Recordings Modal -->
-  <div id="recordings-modal" class="modal hidden">
-    <div class="modal-content">
+  <!-- Library Modal -->
+  <div id="library-modal" class="modal hidden">
+    <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
-        <h2>⏺ Recordings</h2>
-        <button class="modal-close" id="close-recordings-modal">✕</button>
+        <div class="library-tabs">
+          <button class="library-tab active" data-tab="tab-playbooks">📚 Plays</button>
+          <button class="library-tab" data-tab="tab-presets">💾 Presets</button>
+          <button class="library-tab" data-tab="tab-recordings">⏺ Recordings</button>
+        </div>
+        <button class="modal-close" id="close-library-modal">✕</button>
       </div>
       <div class="modal-body">
-        <ul id="recordings-list" class="recordings-list">
-          <li class="no-recordings">No recordings yet</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- Presets Modal -->
-  <div id="presets-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>💾 Board Presets</h2>
-        <button class="modal-close" id="close-presets-modal">✕</button>
-      </div>
-      <div class="modal-body">
-        <button id="save-preset-btn" class="action-btn save-preset-modal-btn" title="Save current board state">💾 Save New Preset</button>
-        <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <button id="export-board-btn" class="action-btn" title="Download board as a file">⬇️ Export to File</button>
-          <button id="import-board-btn" class="action-btn" title="Load board from a file">⬆️ Import from File</button>
-        </div>
-        <input type="file" id="import-file" accept=".json,.tacboard" class="hidden" />
-        <ul id="presets-list" class="presets-list">
-          <li class="no-presets">No presets saved</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- Playbooks Modal -->
-  <div id="playbooks-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>📚 Playbooks</h2>
-        <button class="modal-close" id="close-playbooks-modal">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="playbook-draft-actions">
-          <button id="playbook-new-draft-btn" class="action-btn" title="Start a new draft">📝 New Draft</button>
-          <button id="playbook-capture-step-btn" class="action-btn" title="Capture current token positions as a step">➕ Capture Step</button>
-          <button id="playbook-play-draft-btn" class="action-btn" title="Play current draft without saving">▶ Play Draft</button>
-          <button id="playbook-save-draft-btn" class="action-btn" title="Save this draft as a reusable playbook">💾 Save Draft</button>
-          <button id="playbook-clear-draft-btn" class="action-btn danger" title="Clear current draft steps">🗑️ Clear Draft</button>
+        
+        <!-- Playbooks Tab -->
+        <div id="tab-playbooks" class="library-tab-pane active">
+          <div class="playbook-draft-actions">
+            <button id="playbook-new-draft-btn" class="action-btn" title="Start a new draft">📝 New Draft</button>
+            <button id="playbook-capture-step-btn" class="action-btn" title="Capture current token positions as a step">➕ Capture Step</button>
+            <button id="playbook-play-draft-btn" class="action-btn" title="Play current draft without saving">▶ Play Draft</button>
+            <button id="playbook-save-draft-btn" class="action-btn" title="Save this draft as a reusable playbook">💾 Save Draft</button>
+            <button id="playbook-clear-draft-btn" class="action-btn danger" title="Clear current draft steps">🗑️ Clear Draft</button>
+          </div>
+          <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <button id="playbook-export-btn" class="action-btn" title="Download all saved playbooks to a file">⬇️ Export Plays</button>
+            <button id="playbook-import-btn" class="action-btn" title="Import playbooks from a file">⬆️ Import Plays</button>
+          </div>
+          <input type="file" id="playbook-import-file" accept=".json,.tacplaybooks" class="hidden" />
+          
+          <div class="playbook-section-title">Draft Steps</div>
+          <ul id="playbook-draft-list" class="playbook-steps-list">
+            <li class="no-playbooks">No draft steps yet</li>
+          </ul>
+          
+          <div class="playbook-section-title">Saved Playbooks</div>
+          <ul id="playbooks-list" class="playbooks-list">
+            <li class="no-playbooks">No playbooks yet</li>
+          </ul>
+          
+          <div class="playbook-footer-actions">
+            <button id="playbook-start-btn" class="action-btn" title="Play selected playbook for everyone in the room">▶ Run Selected</button>
+            <button id="playbook-stop-btn" class="action-btn danger" title="Stop current playbook playback">⏹ Stop Playback</button>
+          </div>
         </div>
 
-        <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 10px;">
-          <button id="playbook-export-btn" class="action-btn" title="Download all saved playbooks to a file">⬇️ Export Plays</button>
-          <button id="playbook-import-btn" class="action-btn" title="Import playbooks from a file">⬆️ Import Plays</button>
+        <!-- Presets Tab -->
+        <div id="tab-presets" class="library-tab-pane hidden">
+          <button id="save-preset-btn" class="action-btn save-preset-modal-btn" title="Save current board state">💾 Save New Preset</button>
+          <div class="import-export-btns" style="display: flex; gap: 8px; margin-bottom: 12px; margin-top: 10px;">
+            <button id="export-board-btn" class="action-btn" title="Download board as a file">⬇️ Export to File</button>
+            <button id="import-board-btn" class="action-btn" title="Load board from a file">⬆️ Import from File</button>
+          </div>
+          <input type="file" id="import-file" accept=".json,.tacboard" class="hidden" />
+          <ul id="presets-list" class="presets-list">
+            <li class="no-presets">No presets saved</li>
+          </ul>
         </div>
-        <input type="file" id="playbook-import-file" accept=".json,.tacplaybooks" class="hidden" />
 
-        <div class="playbook-section-title">Draft Steps</div>
-        <ul id="playbook-draft-list" class="playbook-steps-list">
-          <li class="no-playbooks">No draft steps yet</li>
-        </ul>
-
-        <div class="playbook-section-title">Saved Playbooks</div>
-        <ul id="playbooks-list" class="playbooks-list">
-          <li class="no-playbooks">No playbooks yet</li>
-        </ul>
-
-        <div class="playbook-footer-actions">
-          <button id="playbook-start-btn" class="action-btn" title="Play selected playbook for everyone in the room">▶ Run Selected</button>
-          <button id="playbook-stop-btn" class="action-btn danger" title="Stop current playbook playback">⏹ Stop Playback</button>
+        <!-- Recordings Tab -->
+        <div id="tab-recordings" class="library-tab-pane hidden">
+          <ul id="recordings-list" class="recordings-list">
+            <li class="no-recordings">No recordings yet</li>
+          </ul>
         </div>
+
       </div>
     </div>
   </div>

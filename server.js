@@ -569,7 +569,7 @@ let playbooks = [];
 let nextPlaybookId = 1;
 
 function sanitizeTokenForPlaybook(token) {
-  const speedFactor = Math.max(0.25, Math.min(4, Number(token.speedFactor) || 1));
+  const speedFactor = Math.max(0.6, Math.min(1.6, Number(token.speedFactor) || 1));
   return {
     id: (token.id || '').toString().substring(0, 40),
     x: Number(token.x) || 0,
@@ -723,7 +723,7 @@ function getPlaybookStepTravelDurationForTokens(currentTokens, step) {
     const distance = Math.hypot(dx, dy);
     if (distance <= 0) return;
     const baseSpeed = Math.max(40, Number(step?.speed) || 180);
-    const speedFactor = Math.max(0.25, Math.min(4, Number(target.speedFactor) || 1));
+    const speedFactor = Math.max(0.6, Math.min(1.6, Number(target.speedFactor) || 1));
     const speed = Math.max(40, baseSpeed * speedFactor);
     const travelMs = (distance / speed) * 1000;
     if (travelMs > maxTravelMs) maxTravelMs = travelMs;
@@ -751,7 +751,7 @@ function startPlaybook(roomId, playbook) {
   stopPlaybook(roomId, false);
 
   const PLAYBOOK_STEP_LEAD_MS = 220;
-  const PLAYBOOK_STEP_GAP_MS = 80;
+  const PLAYBOOK_STEP_GAP_MS = 20;
   const PLAYBOOK_FIRST_ALIGN_MS = 90;
 
   room.play.active = true;

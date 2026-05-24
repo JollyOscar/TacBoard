@@ -1408,7 +1408,7 @@ function connectSocket(username) {
     updatePlaybookDraftStatus();
     renderPlaybookDraftList();
     setPlaybookDraftMode(true);
-    closeModal(document.getElementById('playbooks-modal'));
+    closeModal(document.getElementById('library-modal'));
     toast(`✏️ Editing playbook: ${pb.name}`);
   });
 
@@ -1713,7 +1713,7 @@ document.getElementById('export-board-btn').addEventListener('click', () => {
   URL.revokeObjectURL(url);
   
   toast('⬇️ Board exported');
-  closeModal(document.getElementById('presets-modal'));
+  closeModal(document.getElementById('library-modal'));
 });
 
 const importFileInput = document.getElementById('import-file');
@@ -1740,7 +1740,7 @@ importFileInput.addEventListener('change', (e) => {
       });
       
       toast('⬆️ Board imported successfully');
-      closeModal(document.getElementById('presets-modal'));
+      closeModal(document.getElementById('library-modal'));
     } catch (err) {
       toast('❌ Error loading file: Invalid format');
       console.error(err);
@@ -1955,7 +1955,7 @@ function clampPlaybookTokenSpeed(value, fallback = DEFAULT_PLAYBOOK_TOKEN_SPEED)
 }
 
 function clampPlaybookTokenSpeedFactor(value, fallback = 1) {
-  return Math.max(0.25, Math.min(4, Number(value) || fallback));
+  return Math.max(0.6, Math.min(1.6, Number(value) || fallback));
 }
 
 function getPlaybookStepBaseSpeed(step) {
@@ -2775,7 +2775,7 @@ function renderPlaybooksList() {
       const id = +btn.dataset.playbookId;
       if (!socket || !id || isBoardLocked()) return;
       socket.emit('playbook-start', { playbookId: id });
-      closeModal(document.getElementById('playbooks-modal'));
+      closeModal(document.getElementById('library-modal'));
     });
   });
 
@@ -3112,7 +3112,7 @@ function renderRecordingsList() {
         const recId = +btn.dataset.id;
         if (isReplaying || _recActive || !socket) return;
         socket.emit('replay-start', { recId });
-        closeModal(document.getElementById('recordings-modal'));
+        closeModal(document.getElementById('library-modal'));
       });
     });
 
@@ -3337,53 +3337,45 @@ mobileToggle?.addEventListener('click', () => {
 });
 
 // ── Modal / Popup handling ────────────────────────────────────
-const recordingsModal = document.getElementById('recordings-modal');
-const presetsModal = document.getElementById('presets-modal');
-const playbooksModal = document.getElementById('playbooks-modal');
-const openRecordingsBtn = document.getElementById('open-recordings-btn');
-const openPresetsBtn = document.getElementById('open-presets-btn');
-const openPlaybooksBtn = document.getElementById('open-playbooks-btn');
-const closeRecordingsBtn = document.getElementById('close-recordings-modal');
-const closePresetsBtn = document.getElementById('close-presets-modal');
-const closePlaybooksBtn = document.getElementById('close-playbooks-modal');
+const libraryModal = document.getElementById('library-modal');
+const openLibraryBtn = document.getElementById('open-library-btn');
+const closeLibraryBtn = document.getElementById('close-library-modal');
+const libraryTabs = document.querySelectorAll('.library-tab');
+const libraryTabPanes = document.querySelectorAll('.library-tab-pane');
 
 function openModal(modal) {
   modal.classList.remove('hidden');
 }
 
 function closeModal(modal) {
-  modal.classList.add('hidden');
+  if (modal) modal.classList.add('hidden');
 }
 
-openRecordingsBtn.addEventListener('click', () => openModal(recordingsModal));
-openPresetsBtn.addEventListener('click', () => openModal(presetsModal));
-openPlaybooksBtn.addEventListener('click', () => {
+openLibraryBtn?.addEventListener('click', () => {
   renderPlaybookDraftList();
   renderPlaybooksList();
-  openModal(playbooksModal);
-});
-closeRecordingsBtn.addEventListener('click', () => closeModal(recordingsModal));
-closePresetsBtn.addEventListener('click', () => closeModal(presetsModal));
-closePlaybooksBtn.addEventListener('click', () => closeModal(playbooksModal));
-
-// Close modals when clicking outside the content
-recordingsModal.addEventListener('click', (e) => {
-  if (e.target === recordingsModal) closeModal(recordingsModal);
-});
-presetsModal.addEventListener('click', (e) => {
-  if (e.target === presetsModal) closeModal(presetsModal);
-});
-playbooksModal.addEventListener('click', (e) => {
-  if (e.target === playbooksModal) closeModal(playbooksModal);
+  openModal(libraryModal);
 });
 
-// Close modals with Escape key
+closeLibraryBtn?.addEventListener('click', () => closeModal(libraryModal));
+
+libraryModal?.addEventListener('click', (e) => {
+  if (e.target === libraryModal) closeModal(libraryModal);
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (!recordingsModal.classList.contains('hidden')) closeModal(recordingsModal);
-    if (!presetsModal.classList.contains('hidden')) closeModal(presetsModal);
-    if (!playbooksModal.classList.contains('hidden')) closeModal(playbooksModal);
+    if (!libraryModal?.classList.contains('hidden')) closeModal(libraryModal);
   }
+});
+
+libraryTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    libraryTabs.forEach(t => t.classList.remove('active'));
+    libraryTabPanes.forEach(p => p.classList.add('hidden'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.remove('hidden');
+  });
 });
 
 document.getElementById('playbook-new-draft-btn')?.addEventListener('click', () => {
@@ -3393,7 +3385,7 @@ document.getElementById('playbook-new-draft-btn')?.addEventListener('click', () 
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
   setPlaybookDraftMode(true);
-  closeModal(playbooksModal);
+  closeModal(document.getElementById('library-modal'));
   toast('📝 Draft mode enabled. Move pieces and capture steps from the top bar.');
 });
 
