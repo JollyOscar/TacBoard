@@ -1744,6 +1744,10 @@ function updateClearBtnLabels() {
 }
 
 document.getElementById('clear-drawings-btn').addEventListener('click', () => {
+  if (_isPlaybookDraftMode) {
+    toast('⚠️ Cannot clear board while editing a playbook draft');
+    return;
+  }
   const idleLabel = ownEraseOnly ? '🗑️ Clear My Lines' : '🗑️ Clear Lines';
   armConfirm('clear-drawings-btn', idleLabel, 'Sure? Click again', () => {
     if (ownEraseOnly) {
@@ -1769,6 +1773,10 @@ document.getElementById('clear-drawings-btn').addEventListener('click', () => {
   });
 });
 document.getElementById('clear-board-btn').addEventListener('click', () => {
+  if (_isPlaybookDraftMode) {
+    toast('⚠️ Cannot clear board while editing a playbook draft');
+    return;
+  }
   const idleLabel = ownEraseOnly ? '💥 Clear My Stuff' : '💥 Clear All';
   armConfirm('clear-board-btn', idleLabel, '⚠️ Click to confirm', () => {
     if (ownEraseOnly) {
@@ -2044,6 +2052,8 @@ function renderPlaybookStepStrip() {
     chip.title = `Step ${idx + 1}: ${step.name}`;
     chip.addEventListener('click', () => {
       _selectedDraftStepIndex = idx;
+      resetPlaybookAnimationSchedule();
+      clearPlaybookGhosts();
       renderPlaybookDraftList();
       renderPlaybookStepStrip();
       renderPlaybookSpeedTether();
@@ -2502,6 +2512,7 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
   });
 
   clearPlaybookGhosts();
+  const removeIds = Object.keys(tokens).filter(id => !targetMap[id]);
 
   const rect = canvasStack.getBoundingClientRect();
   const scaleX = rect.width / PITCH_W;
@@ -2512,7 +2523,7 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     const startY = from.y * scaleY;
     const endX = to.x * scaleX;
     const endY = to.y * scaleY;
-    const distance = Math.hypot(endX - startX, endY - startY);
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
     const speed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED) * clampPlaybookTokenSpeedFactor(to.speedFactor, 1);
     const travelDuration = Math.max(250, Math.ceil((distance / speed) * 1000));
     return { to, from, startX, startY, endX, endY, distance, speed, travelDuration };
@@ -2542,8 +2553,6 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     const tokenEl = document.getElementById('token-' + to.id);
     if (!tokenEl) return;
   });
-
-  const removeIds = Object.keys(tokens).filter(id => !targetMap[id]);
   cancelAnimationFrame(_playbookAnimRaf);
 
   const run = () => {
@@ -2680,6 +2689,8 @@ function renderPlaybookDraftList() {
   list.querySelectorAll('.playbook-step-info').forEach(info => {
     info.addEventListener('click', () => {
       _selectedDraftStepIndex = +info.closest('.playbook-step-item')?.dataset.stepIndex;
+      resetPlaybookAnimationSchedule();
+      clearPlaybookGhosts();
       renderPlaybookDraftList();
       renderPlaybookStepStrip();
       renderPlaybookSpeedTether();
