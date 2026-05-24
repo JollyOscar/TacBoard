@@ -775,16 +775,15 @@ const ICONS = {
 const iconImages = {};
 Object.entries(ICONS).forEach(([name, svgTxt]) => {
   const img = new Image();
-  const blob = new Blob([svgTxt], { type: 'image/svg+xml' });
-  img.src = URL.createObjectURL(blob);
-  iconImages[name] = img;
+iconImages[name] = img;
 });
 
 // ── Tokens ────────────────────────────────────────────────────
 
 function createTokenEl(token) {
   const el = document.createElement('div');
-  el.id = 'token-' + token.id;
+  const tokenId = token.id;
+  el.id = 'token-' + tokenId;
   if (token.shape === 'icon' || token.shape === 'ball') {
     el.className = 'token token-icon';
     const iconName = token.shape === 'ball' ? 'ball' : token.label;
@@ -817,7 +816,7 @@ function createTokenEl(token) {
   del.title = 'Remove';
   del.addEventListener('click', e => {
     e.stopPropagation();
-    socket?.emit('token-remove', { id: token.id });
+    socket?.emit('token-remove', { id: tokenId });
   });
   el.appendChild(del);
 
@@ -825,25 +824,27 @@ function createTokenEl(token) {
   if (token.shape !== 'ball' && token.shape !== 'icon') {
     el.addEventListener('dblclick', e => {
       e.stopPropagation();
+      const currentToken = tokens[tokenId];
+      if (!currentToken) return;
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'token-rename-input';
-      input.value = token.label || '';
+      input.value = currentToken.label || '';
       input.maxLength = 4;
       const rect2 = canvasStack.getBoundingClientRect();
       const scaleX = rect2.width  / PITCH_W;
       const scaleY = rect2.height / PITCH_H;
-      input.style.left = (token.x * scaleX) + 'px';
-      input.style.top  = (token.y * scaleY) + 'px';
+      input.style.left = (currentToken.x * scaleX) + 'px';
+      input.style.top  = (currentToken.y * scaleY) + 'px';
       tokenLayer.appendChild(input);
       input.focus(); input.select();
       const commit = () => {
-        const newLabel = input.value.trim() || token.label;
+        const newLabel = input.value.trim() || currentToken.label;
         input.remove();
-        if (newLabel !== token.label) {
-          token.label = newLabel;
+        if (newLabel !== currentToken.label) {
+          currentToken.label = newLabel;
           el.childNodes[0].textContent = newLabel; // update text node (first child)
-          socket?.emit('token-relabel', { id: token.id, label: newLabel });
+          socket?.emit('token-relabel', { id: tokenId, label: newLabel });
         }
       };
       input.addEventListener('blur', commit);
@@ -860,7 +861,10 @@ function createTokenEl(token) {
     el.classList.remove('dragging');
     try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch {}
     // Emit final position on pointer up to ensure sync
-    socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+    const currentToken = tokens[tokenId];
+    if (currentToken) {
+      socket?.emit('token-move', { id: tokenId, x: currentToken.x, y: currentToken.y });
+    }
     renderPlaybookSpeedTether();
   };
   el.addEventListener('pointerdown', e => {
@@ -874,20 +878,22 @@ function createTokenEl(token) {
   });
   el.addEventListener('pointermove', e => {
     if (!dragging) return;
+    const currentToken = tokens[tokenId];
+    if (!currentToken) return;
     const dx = e.clientX - ox; ox = e.clientX;
     const dy = e.clientY - oy; oy = e.clientY;
     const rect = canvasStack.getBoundingClientRect();
     const scaleX = PITCH_W / rect.width;
     const scaleY = PITCH_H / rect.height;
-    token.x += dx * scaleX;
-    token.y += dy * scaleY;
+    currentToken.x += dx * scaleX;
+    currentToken.y += dy * scaleY;
     // Clamp
-    token.x = Math.max(0, Math.min(PITCH_W, token.x));
-    token.y = Math.max(0, Math.min(PITCH_H, token.y));
-    positionToken(el, token.x, token.y);
+    currentToken.x = Math.max(0, Math.min(PITCH_W, currentToken.x));
+    currentToken.y = Math.max(0, Math.min(PITCH_H, currentToken.y));
+    positionToken(el, currentToken.x, currentToken.y);
     const now = Date.now();
     if (now - _lastTokenEmit > 33) { // ~30fps
-      socket?.emit('token-move', { id: token.id, x: token.x, y: token.y });
+      socket?.emit('token-move', { id: tokenId, x: currentToken.x, y: currentToken.y });
       _lastTokenEmit = now;
     }
     renderPlaybookSpeedTether();
