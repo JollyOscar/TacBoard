@@ -2261,16 +2261,40 @@ function resetPlaybookAnimationSchedule() {
   _playbookAnimRaf = null;
 }
 
+function estimatePlaybookMotionDuration(targets, duration, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
+  const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
+  const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
+  let maxTravelDuration = safeDuration;
+
+  (targets || []).forEach((t) => {
+    if (!t?.id) return;
+    const from = tokens[t.id];
+    if (!from) return;
+    const dx = (Number(t.x) || 0) - (Number(from.x) || 0);
+    const dy = (Number(t.y) || 0) - (Number(from.y) || 0);
+    const distance = Math.hypot(dx, dy);
+    const tokenSpeed = clampPlaybookStepSpeed(
+      safeStepSpeed * clampPlaybookTokenSpeedFactor(t.speedFactor, Number.isFinite(Number(t.speed)) && safeStepSpeed ? Number(t.speed) / safeStepSpeed : 1),
+      safeStepSpeed
+    );
+    const travelDuration = Math.max(250, Math.ceil((distance / tokenSpeed) * 1000));
+    if (travelDuration > maxTravelDuration) maxTravelDuration = travelDuration;
+  });
+
+  return maxTravelDuration;
+}
+
 function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED) {
   const safeDuration = Math.max(250, Math.min(10000, Number(duration) || 1200));
+  const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
+  const completionDuration = estimatePlaybookMotionDuration(targets || [], safeDuration, safeStepSpeed);
   const safeStartAt = Number(startAt) || Date.now();
   const plannedStart = Math.max(Date.now() + 16, safeStartAt, _playbookAnimBusyUntil);
-  _playbookAnimBusyUntil = plannedStart + safeDuration;
-  const safeStepSpeed = clampPlaybookStepSpeed(stepSpeed, DEFAULT_PLAYBOOK_STEP_SPEED);
+  _playbookAnimBusyUntil = plannedStart + completionDuration;
 
   const timerId = setTimeout(() => {
     _playbookStepStartTimers = _playbookStepStartTimers.filter(id => id !== timerId);
-    animateTokensToTargets(targets || [], safeDuration, plannedStart, safeStepSpeed);
+    animateTokensToTargets(targets || [], completionDuration, plannedStart, safeStepSpeed);
   }, Math.max(0, plannedStart - Date.now()));
 
   _playbookStepStartTimers.push(timerId);

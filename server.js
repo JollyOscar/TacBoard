@@ -710,13 +710,13 @@ function clearPlaybookTimers(room) {
   room.play.timeoutIds = [];
 }
 
-function getPlaybookStepTravelDuration(room, step) {
+function getPlaybookStepTravelDurationForTokens(currentTokens, step) {
   const fallbackDuration = Math.max(250, Number(step?.duration) || 1200);
   const targets = Object.values(step?.tokens || {});
   let maxTravelMs = 0;
 
   targets.forEach(target => {
-    const current = room.tokens?.[target.id];
+    const current = currentTokens?.[target.id];
     if (!current) return;
     const dx = (Number(target.x) || 0) - (Number(current.x) || 0);
     const dy = (Number(target.y) || 0) - (Number(current.y) || 0);
@@ -730,6 +730,10 @@ function getPlaybookStepTravelDuration(room, step) {
   });
 
   return Math.max(fallbackDuration, Math.ceil(maxTravelMs));
+}
+
+function getPlaybookStepTravelDuration(room, step) {
+  return getPlaybookStepTravelDurationForTokens(room.tokens || {}, step);
 }
 
 function stopPlaybook(roomId, emitEvent = true) {
@@ -767,8 +771,9 @@ function startPlaybook(roomId, playbook) {
 
   const baseStartAt = Date.now() + PLAYBOOK_STEP_LEAD_MS;
   let offset = 0;
+  let simulatedTokens = JSON.parse(JSON.stringify(room.tokens || {}));
   steps.forEach((step, idx) => {
-    const duration = getPlaybookStepTravelDuration(room, step);
+    const duration = getPlaybookStepTravelDurationForTokens(simulatedTokens, step);
     const stepSpeed = Math.max(40, Number(step.speed) || 260);
     const stepStartAt = baseStartAt + offset;
     const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
@@ -803,6 +808,7 @@ function startPlaybook(roomId, playbook) {
 
     room.play.timeoutIds.push(stepTimer);
     offset += duration + PLAYBOOK_STEP_GAP_MS;
+    simulatedTokens = JSON.parse(JSON.stringify(step.tokens || {}));
   });
 }
 
