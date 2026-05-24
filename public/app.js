@@ -1399,6 +1399,19 @@ function connectSocket(username) {
     renderPlaybooksList();
   });
 
+  socket.on('playbook-data', (pb) => {
+    _draftPlaybookId = pb.id;
+    _draftPlaybookName = pb.name;
+    _draftPlaybookSteps = pb.steps;
+    _selectedDraftStepIndex = -1;
+    syncDraftNameInput();
+    updatePlaybookDraftStatus();
+    renderPlaybookDraftList();
+    setPlaybookDraftMode(true);
+    closeModal(document.getElementById('playbooks-modal'));
+    toast(`✏️ Editing playbook: ${pb.name}`);
+  });
+
   socket.on('playbook-saved', ({ name }) => {
     toast(`📚 Playbook saved: ${escHtml(name)}`);
   });
@@ -1424,10 +1437,13 @@ function connectSocket(username) {
     );
   });
 
-  const onPlaybookDone = () => finishPlaybookPlayback('⏹ Playbook playback ended');
-
-  socket.on('playbook-finished', onPlaybookDone);
-  socket.on('playbook-stopped', onPlaybookDone);
+  socket.on('playbook-finished', () => {
+    finishPlaybookPlayback('✅ Playbook finished');
+  });
+  socket.on('playbook-stopped', () => {
+    resetPlaybookAnimationSchedule();
+    finishPlaybookPlayback('⏹ Playbook stopped');
+  });
 }
 
 // ── User list ─────────────────────────────────────────────────
@@ -1915,6 +1931,7 @@ let _captureStream     = null;
 // ── Playbooks (multi-step simultaneous token movement) ───────
 let _playbooks = [];
 let _selectedPlaybookId = null;
+let _draftPlaybookId = null;
 let _draftPlaybookSteps = [];
 let _playbookAnimRaf = null;
 let _playbookStepStartTimers = [];
@@ -1927,7 +1944,7 @@ let _playbookSpeedDrag = null;
 let _playbookSpeedTetherNodes = new Map();
 let _isLocalDraftPlayback = false;
 const DEFAULT_PLAYBOOK_TOKEN_SPEED = 260;
-const DEFAULT_PLAYBOOK_STEP_SPEED = 260;
+const DEFAULT_PLAYBOOK_STEP_SPEED = 180;
 
 function clampPlaybookStepSpeed(value, fallback = DEFAULT_PLAYBOOK_STEP_SPEED) {
   return Math.max(40, Math.min(2000, Number(value) || fallback));
@@ -2306,10 +2323,10 @@ function finishPlaybookPlayback(message = '⏹ Playbook playback ended') {
   isPlaybookPlaying = false;
   _isLocalDraftPlayback = false;
   if (!isReplaying) liveCanvas.style.pointerEvents = '';
-  resetPlaybookAnimationSchedule();
+  // Let the current animation frame gracefully finish on its own if running
   clearPlaybookGhosts();
   renderPlaybookSpeedTether();
-  toast(message);
+  if (message) toast(message);
 }
 
 function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
@@ -2418,13 +2435,22 @@ function saveDraftPlaybook() {
   }
   if (!name) return;
 
-  socket?.emit('save-playbook', {
-    name: name.substring(0, 80),
-    steps: _draftPlaybookSteps
-  });
+  if (_draftPlaybookId) {
+    socket?.emit('update-playbook', {
+      playbookId: _draftPlaybookId,
+      name: name.substring(0, 80),
+      steps: _draftPlaybookSteps
+    });
+  } else {
+    socket?.emit('save-playbook', {
+      name: name.substring(0, 80),
+      steps: _draftPlaybookSteps
+    });
+  }
 
   _draftPlaybookSteps = [];
   _draftPlaybookName = '';
+  _draftPlaybookId = null;
   updatePlaybookDraftStatus();
   syncDraftNameInput();
   renderPlaybookDraftList();
@@ -2548,11 +2574,6 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     return;
   }
 
-  targetMeta.forEach(meta => {
-    const { to, startX, startY, endX, endY, distance } = meta;
-    const tokenEl = document.getElementById('token-' + to.id);
-    if (!tokenEl) return;
-  });
   cancelAnimationFrame(_playbookAnimRaf);
 
   const run = () => {
@@ -2733,7 +2754,8 @@ function renderPlaybooksList() {
       </div>
       <div class="playbook-actions">
         <button class="playbook-play" data-playbook-id="${pb.id}" title="Run this playbook">▶</button>
-        <button class="playbook-rename" data-playbook-id="${pb.id}" title="Rename">✏️</button>
+        <button class="playbook-edit" data-playbook-id="${pb.id}" title="Edit playbook">✏️</button>
+        <button class="playbook-rename" data-playbook-id="${pb.id}" title="Rename">Aa</button>
         <button class="playbook-delete" data-playbook-id="${pb.id}" title="Delete">×</button>
       </div>
     `;
@@ -2754,6 +2776,15 @@ function renderPlaybooksList() {
       if (!socket || !id || isBoardLocked()) return;
       socket.emit('playbook-start', { playbookId: id });
       closeModal(document.getElementById('playbooks-modal'));
+    });
+  });
+
+  list.querySelectorAll('.playbook-edit').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = +btn.dataset.playbookId;
+      if (!socket || !id) return;
+      socket.emit('get-playbook', { playbookId: id });
     });
   });
 

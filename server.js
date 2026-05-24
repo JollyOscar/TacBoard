@@ -586,7 +586,7 @@ function normalizePlaybookSteps(steps) {
   if (!Array.isArray(steps)) return [];
   return steps.slice(0, 200).map((step, idx) => {
     const safeDuration = Math.max(250, Math.min(10000, Number(step.duration) || 1200));
-    const safeSpeed = Math.max(40, Math.min(2000, Number(step.speed) || 260));
+    const safeSpeed = Math.max(40, Math.min(2000, Number(step.speed) || 180));
     const safeName = (step.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
     const tokensArr = Array.isArray(step.targets)
       ? step.targets
@@ -722,7 +722,7 @@ function getPlaybookStepTravelDurationForTokens(currentTokens, step) {
     const dy = (Number(target.y) || 0) - (Number(current.y) || 0);
     const distance = Math.hypot(dx, dy);
     if (distance <= 0) return;
-    const baseSpeed = Math.max(40, Number(step?.speed) || 260);
+    const baseSpeed = Math.max(40, Number(step?.speed) || 180);
     const speedFactor = Math.max(0.25, Math.min(4, Number(target.speedFactor) || 1));
     const speed = Math.max(40, baseSpeed * speedFactor);
     const travelMs = (distance / speed) * 1000;
@@ -779,7 +779,7 @@ function startPlaybook(roomId, playbook) {
     const duration = instantStart
       ? Math.min(calculatedDuration, PLAYBOOK_FIRST_ALIGN_MS)
       : calculatedDuration;
-    const stepSpeed = Math.max(40, Number(step.speed) || 260);
+    const stepSpeed = Math.max(40, Number(step.speed) || 180);
     const stepStartAt = baseStartAt + offset;
     const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
 
@@ -1682,6 +1682,36 @@ io.on('connection', (socket) => {
   });
 
   // 10e. Playbooks (simultaneous token movement by step)
+  socket.on('get-playbook', (payload) => {
+    const data = asObject(payload);
+    const playbookId = toSafeNumber(data.playbookId, 1, Number.MAX_SAFE_INTEGER, 0);
+    if (!playbookId) return;
+    const playbook = playbooks.find(p => p.id === playbookId);
+    if (!playbook) return;
+    socket.emit('playbook-data', playbook);
+  });
+
+  socket.on('update-playbook', (payload) => {
+    const data = asObject(payload);
+    const playbookId = toSafeNumber(data.playbookId, 1, Number.MAX_SAFE_INTEGER, 0);
+    const name = toSafeString(data.name, 120, '');
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+    if (!playbookId) return;
+    const playbook = playbooks.find(p => p.id === playbookId);
+    if (!playbook) return;
+    
+    const normalizedSteps = normalizePlaybookSteps(steps);
+    if (!normalizedSteps.length) return;
+
+    playbook.name = (name || `Playbook ${new Date().toLocaleString()}`).toString().trim().substring(0, 80) || `Playbook ${new Date().toLocaleString()}`;
+    playbook.timestamp = Date.now();
+    playbook.steps = normalizedSteps;
+
+    updatePlaybookInDB(playbook).then(() => savePlaybooks());
+    emitScopedList(socket, 'playbooks-list', getPlaybooksList());
+    socket.emit('playbook-saved', { id: playbook.id, name: playbook.name });
+  });
+
   socket.on('save-playbook', (payload) => {
     const data = asObject(payload);
     const name = toSafeString(data.name, 120, '');
