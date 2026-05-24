@@ -906,6 +906,7 @@ function repositionAllTokens() {
     const el = document.getElementById('token-' + t.id);
     if (el) positionToken(el, t.x, t.y);
   });
+  renderPlaybookSpeedTether();
 }
 
 // Token counter per color
@@ -1390,20 +1391,22 @@ function connectSocket(username) {
   socket.on('playbook-started', ({ name }) => {
     isPlaybookPlaying = true;
     resetPlaybookAnimationSchedule();
+    clearPlaybookGhosts();
     liveCanvas.style.pointerEvents = 'none';
     toast(`▶ Playbook running: ${escHtml(name)}`);
   });
 
-  socket.on('playbook-step', ({ targets, duration, startAt }) => {
+  socket.on('playbook-step', ({ targets, duration, startAt, travelSpeed }) => {
     isPlaybookPlaying = true;
     liveCanvas.style.pointerEvents = 'none';
-    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now());
+    schedulePlaybookAnimation(targets || [], Number(duration) || 1200, Number(startAt) || Date.now(), travelSpeed);
   });
 
   const onPlaybookDone = () => {
     isPlaybookPlaying = false;
     if (!isReplaying) liveCanvas.style.pointerEvents = '';
     resetPlaybookAnimationSchedule();
+    clearPlaybookGhosts();
     toast('⏹ Playbook playback ended');
   };
 
@@ -1894,12 +1897,15 @@ let _playbookStepStartTimers = [];
 let _playbookAnimBusyUntil = 0;
 let _isPlaybookDraftMode = false;
 let _draftPlaybookName = '';
+let _selectedDraftStepIndex = -1;
+let _playbookGhostNodes = [];
 
 function normalizeImportedPlaybookSteps(rawSteps) {
   if (!Array.isArray(rawSteps)) return [];
   return rawSteps.slice(0, 200).map((step, idx) => {
     const name = (step?.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
     const duration = Math.max(250, Math.min(10000, Number(step?.duration) || 1200));
+    const speed = Math.max(40, Math.min(2000, Number(step?.speed) || 260));
     const sourceTokens = Array.isArray(step?.targets)
       ? step.targets
       : Object.values(step?.tokens || {});
@@ -1917,7 +1923,7 @@ function normalizeImportedPlaybookSteps(rawSteps) {
         createdBy: (t.createdBy || '').toString().substring(0, 60)
       };
     });
-    return { name, duration, tokens: tokensMap };
+    return { name, duration, speed, tokens: tokensMap };
   }).filter(step => Object.keys(step.tokens || {}).length > 0);
 }
 
@@ -1958,6 +1964,95 @@ function setPlaybookDraftMode(active) {
   }
   updatePlaybookDraftStatus();
   syncDraftNameInput();
+}
+
+function clearPlaybookGhosts() {
+  _playbookGhostNodes.forEach(node => node.remove());
+  _playbookGhostNodes = [];
+}
+
+function removePlaybookSpeedTether() {
+  document.getElementById('playbook-speed-tether')?.remove();
+}
+
+function getPlaybookLeadTokenId(step) {
+  const entries = Object.values(step?.tokens || {});
+  if (!entries.length) return null;
+  if (entries.length === 1) return entries[0].id || null;
+
+  let best = entries[0];
+  let maxDistance = -1;
+  entries.forEach(target => {
+    const current = tokens[target.id];
+    if (!current) return;
+    const distance = Math.hypot((Number(target.x) || 0) - (Number(current.x) || 0), (Number(target.y) || 0) - (Number(current.y) || 0));
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      best = target;
+    }
+  });
+  return best?.id || entries[0].id || null;
+}
+
+function renderPlaybookSpeedTether() {
+  removePlaybookSpeedTether();
+  if (!_isPlaybookDraftMode) return;
+  if (_selectedDraftStepIndex < 0 || !_draftPlaybookSteps[_selectedDraftStepIndex]) return;
+
+  const step = _draftPlaybookSteps[_selectedDraftStepIndex];
+  const tokenId = getPlaybookLeadTokenId(step);
+  if (!tokenId) return;
+
+  const current = tokens[tokenId];
+  const target = step.tokens?.[tokenId];
+  if (!current || !target) return;
+
+  const rect = canvasStack.getBoundingClientRect();
+  const scaleX = rect.width / PITCH_W;
+  const scaleY = rect.height / PITCH_H;
+  const startX = Number(current.x) * scaleX;
+  const startY = Number(current.y) * scaleY;
+  const endX = Number(target.x) * scaleX;
+  const endY = Number(target.y) * scaleY;
+  const distance = Math.hypot(endX - startX, endY - startY);
+  if (distance < 1) return;
+
+  const angle = Math.atan2(endY - startY, endX - startX);
+  const tether = document.createElement('div');
+  tether.id = 'playbook-speed-tether';
+  tether.className = 'playbook-speed-tether';
+  tether.style.left = `${startX}px`;
+  tether.style.top = `${startY}px`;
+  tether.style.width = `${distance}px`;
+  tether.style.transform = `rotate(${angle}rad)`;
+
+  const line = document.createElement('div');
+  line.className = 'playbook-speed-tether-line';
+  tether.appendChild(line);
+
+  [0.25, 0.5, 0.75].forEach(fraction => {
+    const dot = document.createElement('span');
+    dot.className = 'playbook-speed-tether-dot';
+    dot.style.left = `${distance * fraction}px`;
+    tether.appendChild(dot);
+  });
+
+  const ghost = document.getElementById('token-' + tokenId)?.cloneNode(true);
+  if (ghost) {
+    ghost.classList.add('playbook-speed-tether-ghost');
+    ghost.style.left = '0';
+    ghost.style.top = '0';
+    ghost.style.transform = 'translate(-50%, -50%)';
+    ghost.style.opacity = '0.34';
+    tether.appendChild(ghost);
+  }
+
+  const marker = document.createElement('span');
+  marker.className = 'playbook-speed-tether-marker';
+  marker.style.left = `${distance}px`;
+  tether.appendChild(marker);
+
+  cursorLayer.appendChild(tether);
 }
 
 function resetPlaybookAnimationSchedule() {
@@ -2104,6 +2199,54 @@ function animateTokensToTargets(targets, duration, startAt) {
     ensureTokenLocal(t);
   });
 
+  // Keep only the active step's ghosts visible, and let them remain until
+  // the next step starts or the playbook ends.
+  clearPlaybookGhosts();
+
+  const trailNodes = [];
+  const rect = canvasStack.getBoundingClientRect();
+  const scaleX = rect.width / PITCH_W;
+  const scaleY = rect.height / PITCH_H;
+  Object.values(targetMap).forEach(to => {
+    const from = fromMap[to.id] || { x: to.x, y: to.y };
+    const tokenEl = document.getElementById('token-' + to.id);
+    if (!tokenEl) return;
+
+    const startX = from.x * scaleX;
+    const startY = from.y * scaleY;
+    const endX = to.x * scaleX;
+    const endY = to.y * scaleY;
+    const trail = document.createElement('div');
+    trail.className = 'playbook-move-trail';
+    trail.style.left = `${startX}px`;
+    trail.style.top = `${startY}px`;
+    trail.style.width = `${Math.hypot(endX - startX, endY - startY)}px`;
+    trail.style.transform = `rotate(${Math.atan2(endY - startY, endX - startX)}rad)`;
+
+    const line = document.createElement('div');
+    line.className = 'playbook-move-trail-line';
+    trail.appendChild(line);
+
+    [0.2, 0.5, 0.8].forEach(fraction => {
+      const dot = document.createElement('span');
+      dot.className = 'playbook-move-trail-dot';
+      dot.style.left = `${Math.hypot(endX - startX, endY - startY) * fraction}px`;
+      trail.appendChild(dot);
+    });
+
+    const ghost = tokenEl.cloneNode(true);
+    ghost.classList.add('playbook-move-ghost');
+    ghost.style.left = '0';
+    ghost.style.top = '0';
+    ghost.style.opacity = '0.36';
+    ghost.style.transform = 'translate(-50%, -50%)';
+    trail.appendChild(ghost);
+
+    cursorLayer.appendChild(trail);
+    trailNodes.push(trail);
+    _playbookGhostNodes.push(trail);
+  });
+
   const removeIds = Object.keys(tokens).filter(id => !targetMap[id]);
   cancelAnimationFrame(_playbookAnimRaf);
 
@@ -2127,8 +2270,8 @@ function animateTokensToTargets(targets, duration, startAt) {
     }
 
     Object.values(targetMap).forEach(to => {
-      ensureTokenLocal(to);
       const token = tokens[to.id];
+      if (!token) return;
       token.x = to.x;
       token.y = to.y;
       const el = document.getElementById('token-' + to.id);
@@ -2140,6 +2283,7 @@ function animateTokensToTargets(targets, duration, startAt) {
       const el = document.getElementById('token-' + id);
       if (el) el.remove();
     });
+
   };
 
   _playbookAnimRaf = requestAnimationFrame(run);
@@ -2151,18 +2295,21 @@ function renderPlaybookDraftList() {
   updatePlaybookDraftStatus();
   if (!_draftPlaybookSteps.length) {
     list.innerHTML = '<li class="no-playbooks">No draft steps yet</li>';
+    removePlaybookSpeedTether();
+    _selectedDraftStepIndex = -1;
     return;
   }
 
   list.innerHTML = '';
   _draftPlaybookSteps.forEach((step, idx) => {
     const li = document.createElement('li');
-    li.className = 'playbook-step-item';
+    li.className = 'playbook-step-item' + (idx === _selectedDraftStepIndex ? ' selected' : '');
+    li.dataset.stepIndex = idx;
     const tokenCount = Object.keys(step.tokens || {}).length;
     li.innerHTML = `
       <div class="playbook-step-info">
         <div class="playbook-step-name">${escHtml(step.name)}</div>
-        <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration:</div>
+        <div class="playbook-step-meta">${tokenCount} token${tokenCount === 1 ? '' : 's'} · duration: ${Math.max(250, Math.min(10000, Number(step.duration) || 1200))}ms · speed: ${Math.round(step.speed || 260)} px/s</div>
       </div>
       <div class="playbook-step-actions">
         <input class="playbook-duration-input" data-step-index="${idx}" type="number" min="250" max="10000" value="${step.duration}" />
@@ -2175,6 +2322,11 @@ function renderPlaybookDraftList() {
     list.appendChild(li);
   });
 
+  const selectedStep = _draftPlaybookSteps[_selectedDraftStepIndex];
+  if (!selectedStep && _selectedDraftStepIndex !== -1) {
+    _selectedDraftStepIndex = -1;
+  }
+
   list.querySelectorAll('.playbook-duration-input').forEach(input => {
     input.addEventListener('change', () => {
       const i = +input.dataset.stepIndex;
@@ -2184,11 +2336,22 @@ function renderPlaybookDraftList() {
     });
   });
 
+  list.querySelectorAll('.playbook-step-info').forEach(info => {
+    info.addEventListener('click', () => {
+      _selectedDraftStepIndex = +info.closest('.playbook-step-item')?.dataset.stepIndex;
+      renderPlaybookDraftList();
+      renderPlaybookSpeedTether();
+    });
+  });
+
   list.querySelectorAll('.playbook-step-delete').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = +btn.dataset.stepIndex;
       _draftPlaybookSteps.splice(i, 1);
+      if (_selectedDraftStepIndex === i) _selectedDraftStepIndex = -1;
+      if (_selectedDraftStepIndex > i) _selectedDraftStepIndex -= 1;
       renderPlaybookDraftList();
+      renderPlaybookSpeedTether();
     });
   });
 
@@ -2201,7 +2364,10 @@ function renderPlaybookDraftList() {
       const tmp = _draftPlaybookSteps[i];
       _draftPlaybookSteps[i] = _draftPlaybookSteps[j];
       _draftPlaybookSteps[j] = tmp;
+      if (_selectedDraftStepIndex === i) _selectedDraftStepIndex = j;
+      else if (_selectedDraftStepIndex === j) _selectedDraftStepIndex = i;
       renderPlaybookDraftList();
+      renderPlaybookSpeedTether();
     });
   });
 
@@ -2210,11 +2376,15 @@ function renderPlaybookDraftList() {
       const i = +btn.dataset.stepIndex;
       const step = _draftPlaybookSteps[i];
       if (!step) return;
+      _selectedDraftStepIndex = i;
+      renderPlaybookDraftList();
       resetPlaybookAnimationSchedule();
-      schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60);
+      schedulePlaybookAnimation(Object.values(step.tokens || {}), Number(step.duration) || 1200, Date.now() + 60, step.speed);
       toast(`👁 Previewing ${escHtml(step.name)}`);
     });
   });
+
+  renderPlaybookSpeedTether();
 }
 
 function renderPlaybooksList() {

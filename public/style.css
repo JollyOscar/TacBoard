@@ -324,6 +324,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
 .playbook-item:hover,
 .playbook-step-item:hover { background: var(--card-bg); }
 .playbook-item.selected { background: var(--accent2); }
+.playbook-step-item.selected { background: rgba(90, 104, 255, 0.16); border-color: rgba(90, 104, 255, 0.35); }
 
 .playbook-info,
 .playbook-step-info { flex: 1; pointer-events: all; }
@@ -391,6 +392,127 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI
   color: var(--text);
   font-size: .72rem;
   padding: 2px 4px;
+}
+
+.playbook-speed-tether {
+  position: absolute;
+  height: 0;
+  transform-origin: 0 50%;
+  pointer-events: none;
+  z-index: 14;
+}
+
+.playbook-speed-tether-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  border-top: 2px dashed rgba(112, 218, 255, 0.95);
+  width: 100%;
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(112, 218, 255, 0.2);
+}
+
+.playbook-speed-tether-handle {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  background: #70daff;
+  box-shadow: 0 0 0 4px rgba(112, 218, 255, 0.2), 0 0 14px rgba(112, 218, 255, 0.45);
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.playbook-speed-tether-handle:active {
+  cursor: grabbing;
+}
+
+.playbook-speed-tether-dot {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: rgba(215, 247, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(112, 218, 255, 0.14);
+}
+
+.playbook-speed-tether-ghost {
+  position: absolute;
+  pointer-events: none;
+  filter: saturate(0.8) brightness(1.15);
+  z-index: 1;
+}
+
+.playbook-speed-tether-marker {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgba(112, 218, 255, 1);
+  box-shadow: 0 0 0 4px rgba(112, 218, 255, 0.16);
+}
+
+.playbook-speed-tether-label {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(15, 22, 33, 0.95);
+  border: 1px solid rgba(112, 218, 255, 0.35);
+  color: #d7f7ff;
+  font-size: .66rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.playbook-move-trail {
+  position: absolute;
+  height: 0;
+  transform-origin: 0 50%;
+  pointer-events: none;
+  z-index: 13;
+}
+
+.playbook-move-trail-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  border-top: 2px dashed rgba(255, 255, 255, 0.72);
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
+}
+
+.playbook-move-trail-dot {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+}
+
+.playbook-move-ghost {
+  position: absolute;
+  filter: saturate(0.6) brightness(1.2);
+  pointer-events: none;
+  z-index: 14;
 }
 
 /* Inline rename input (presets + recordings) */

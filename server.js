@@ -584,6 +584,7 @@ function normalizePlaybookSteps(steps) {
   if (!Array.isArray(steps)) return [];
   return steps.slice(0, 200).map((step, idx) => {
     const safeDuration = Math.max(250, Math.min(10000, Number(step.duration) || 1200));
+    const safeSpeed = Math.max(40, Math.min(2000, Number(step.speed) || 260));
     const safeName = (step.name || `Step ${idx + 1}`).toString().trim().substring(0, 60) || `Step ${idx + 1}`;
     const tokensArr = Array.isArray(step.targets)
       ? step.targets
@@ -596,6 +597,7 @@ function normalizePlaybookSteps(steps) {
     return {
       name: safeName,
       duration: safeDuration,
+      speed: safeSpeed,
       tokens: safeTokens
     };
   });
@@ -702,6 +704,26 @@ function clearPlaybookTimers(room) {
   room.play.timeoutIds = [];
 }
 
+function getPlaybookStepTravelDuration(room, step) {
+  const fallbackDuration = Math.max(250, Number(step?.duration) || 1200);
+  const speed = Math.max(40, Number(step?.speed) || 260);
+  const targets = Object.values(step?.tokens || {});
+  let maxTravelMs = 0;
+
+  targets.forEach(target => {
+    const current = room.tokens?.[target.id];
+    if (!current) return;
+    const dx = (Number(target.x) || 0) - (Number(current.x) || 0);
+    const dy = (Number(target.y) || 0) - (Number(current.y) || 0);
+    const distance = Math.hypot(dx, dy);
+    if (distance <= 0) return;
+    const travelMs = (distance / speed) * 1000;
+    if (travelMs > maxTravelMs) maxTravelMs = travelMs;
+  });
+
+  return Math.max(fallbackDuration, Math.ceil(maxTravelMs));
+}
+
 function stopPlaybook(roomId, emitEvent = true) {
   const room = getRoom(roomId);
   if (!room.play.active) return;
@@ -738,7 +760,8 @@ function startPlaybook(roomId, playbook) {
   const baseStartAt = Date.now() + PLAYBOOK_STEP_LEAD_MS;
   let offset = 0;
   steps.forEach((step, idx) => {
-    const duration = Math.max(250, Number(step.duration) || 1200);
+    const duration = getPlaybookStepTravelDuration(room, step);
+    const travelSpeed = Math.max(40, Number(step.speed) || 260);
     const stepStartAt = baseStartAt + offset;
     const emitIn = Math.max(0, stepStartAt - Date.now() - PLAYBOOK_STEP_LEAD_MS);
 
@@ -752,6 +775,7 @@ function startPlaybook(roomId, playbook) {
         stepIndex: idx,
         stepName: step.name,
         duration,
+        travelSpeed,
         startAt: stepStartAt,
         targets: Object.values(step.tokens || {})
       });
