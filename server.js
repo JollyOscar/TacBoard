@@ -436,6 +436,75 @@ function clearPendingJoinRequestsForSocket(socketId) {
   });
 }
 
+function clearPendingJoinRequestsForRoom(roomId, reason = 'room-closed') {
+  Object.keys(pendingJoinRequests).forEach(requestId => {
+    const req = pendingJoinRequests[requestId];
+    if (!req || req.roomId !== roomId) return;
+    clearTimeout(req.timeoutId);
+    const requester = io.sockets.sockets.get(req.requesterSocketId);
+    const hostSocket = io.sockets.sockets.get(req.hostSocketId);
+    if (requester) requester.emit('join-denied', { room: req.roomId, reason: 'Room is no longer available' });
+    if (hostSocket) {
+      hostSocket.emit('room-join-request-expired', {
+        requestId,
+        username: req.username,
+        room: req.roomId,
+        reason
+      });
+    }
+    delete pendingJoinRequests[requestId];
+  });
+}
+
+function selectNextHostId(room) {
+  let bestId = null;
+  let bestJoinedAt = Number.POSITIVE_INFINITY;
+  Object.entries(room.users || {}).forEach(([id, user]) => {
+    const joinedAt = Number(user?.joinedAt) || Number.POSITIVE_INFINITY;
+    if (joinedAt < bestJoinedAt) {
+      bestJoinedAt = joinedAt;
+      bestId = id;
+      return;
+    }
+    if (joinedAt === bestJoinedAt && bestId && id < bestId) {
+      bestId = id;
+    }
+  });
+  return bestId;
+}
+
+function closeRoom(roomId, closedBySocketId = null) {
+  const room = rooms[roomId];
+  if (!room) return false;
+
+  const closedByName = room.users[closedBySocketId]?.username || 'Host';
+  if (room.play?.active) stopPlaybook(roomId, false);
+  clearPendingJoinRequestsForRoom(roomId, 'room-closed');
+
+  const userIds = Object.keys(room.users);
+  userIds.forEach((userId) => {
+    const target = io.sockets.sockets.get(userId);
+    if (target) {
+      target.emit('room-removed', {
+        room: roomId,
+        reason: `Room closed by ${closedByName}.`
+      });
+      try { target.leave(roomId); } catch {}
+    }
+
+    delete socketRooms[userId];
+    delete rateLimits[userId];
+    if (disconnectTimers[userId]) {
+      clearTimeout(disconnectTimers[userId]);
+      delete disconnectTimers[userId];
+    }
+  });
+
+  delete rooms[roomId];
+  console.log(`[*] Room "${roomId}" closed by ${closedByName}`);
+  return true;
+}
+
 function removeUserFromRoom(roomId, socketId, options = {}) {
   const room = rooms[roomId];
   if (!room) return false;
@@ -446,8 +515,10 @@ function removeUserFromRoom(roomId, socketId, options = {}) {
   const reason = options.reason || null;
   delete room.users[socketId];
 
+  let hostChanged = false;
   if (room.hostId === socketId) {
-    room.hostId = Object.keys(room.users)[0] || null;
+    room.hostId = selectNextHostId(room);
+    hostChanged = true;
   }
 
   delete socketRooms[socketId];
@@ -465,12 +536,20 @@ function removeUserFromRoom(roomId, socketId, options = {}) {
       target.emit('room-removed', { room: roomId, reason: 'You were removed by the host.' });
     } else if (reason === 'banned') {
       target.emit('room-removed', { room: roomId, reason: 'You were banned by the host.' });
+    } else if (reason === 'left') {
+      target.emit('room-removed', { room: roomId, reason: 'You left the room.' });
     }
   }
 
   io.to(roomId).emit('cursor-remove', { socketId });
   io.to(roomId).emit('user-left', departedUser);
   io.to(roomId).emit('user-list', getUsersWithHost(room));
+  if (hostChanged) {
+    io.to(roomId).emit('room-host-changed', {
+      hostId: room.hostId,
+      hostUsername: room.users[room.hostId]?.username || null
+    });
+  }
 
   // Clean up empty rooms to prevent memory leaks
   if (Object.keys(room.users).length === 0) {
@@ -788,7 +867,7 @@ io.on('connection', (socket) => {
       const oldRoom = getRoom(prevRoom);
       delete oldRoom.users[socket.id];
       if (oldRoom.hostId === socket.id) {
-        oldRoom.hostId = Object.keys(oldRoom.users)[0] || null;
+        oldRoom.hostId = selectNextHostId(oldRoom);
       }
       io.to(prevRoom).emit('user-list', getUsersWithHost(oldRoom));
     }
@@ -860,14 +939,17 @@ io.on('connection', (socket) => {
     socketRooms[socket.id] = roomId;
 
     let color;
+    let joinedAt;
     if (existingSocketId) {
       color = room.users[existingSocketId].color; // keep their colour
+      joinedAt = room.users[existingSocketId].joinedAt || Date.now();
       if (room.hostId === existingSocketId) room.hostId = socket.id;
       delete room.users[existingSocketId];
     } else {
       color = getNextColor(room);
+      joinedAt = Date.now();
     }
-    room.users[socket.id] = { id: socket.id, username, color };
+    room.users[socket.id] = { id: socket.id, username, color, joinedAt };
     if (!room.hostId) room.hostId = socket.id;
     if (approvedJoinOnce[socket.id] === roomId) delete approvedJoinOnce[socket.id];
 
@@ -979,6 +1061,20 @@ io.on('connection', (socket) => {
     clearPendingJoinRequestsForSocket(userId);
     removeUserFromRoom(roomId, userId, { reason: 'banned' });
     console.log(`[HOST] ${room.users[socket.id]?.username || socket.id} banned ${targetUser?.username || userId} from room: ${roomId}`);
+  });
+
+  socket.on('leave-room', () => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    removeUserFromRoom(roomId, socket.id, { reason: 'left' });
+  });
+
+  socket.on('host-close-room', () => {
+    const roomId = socketRooms[socket.id];
+    if (!roomId) return;
+    const room = rooms[roomId];
+    if (!room || room.hostId !== socket.id) return;
+    closeRoom(roomId, socket.id);
   });
 
   // 2. Live drawing (broadcast only, not stored)

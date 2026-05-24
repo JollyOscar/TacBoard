@@ -30,6 +30,8 @@ const toastContainer= document.getElementById('toast-container');
 const ownEraseCheck = document.getElementById('own-erase-check');
 const arrowDashedCheck = document.getElementById('arrow-dashed-check');
 const roomLockBtn = document.getElementById('room-lock-btn');
+const leaveRoomBtn = document.getElementById('leave-room-btn');
+const closeRoomBtn = document.getElementById('close-room-btn');
 const playbookBuilderBar = document.getElementById('playbook-builder-bar');
 const playbookDraftNameInput = document.getElementById('playbook-draft-name-input');
 const playbookDraftStatusEl = document.getElementById('playbook-draft-status');
@@ -97,6 +99,18 @@ function renderRoomLockButton() {
   roomLockBtn.title = myIsHost
     ? (roomLocked ? 'Unlock board edits for teammates' : 'Lock board edits for teammates')
     : (roomLocked ? 'Host locked board edits' : 'Only host can toggle room lock');
+}
+
+function renderRoomAdminButtons() {
+  if (closeRoomBtn) {
+    closeRoomBtn.disabled = !myIsHost;
+    closeRoomBtn.title = myIsHost
+      ? 'Close this room for everyone'
+      : 'Only host can close room';
+  }
+  if (leaveRoomBtn) {
+    leaveRoomBtn.disabled = !socket || !socket.connected;
+  }
 }
 
 function renderHostJoinRequestModal() {
@@ -1003,6 +1017,7 @@ function connectSocket(username) {
     roomLocked = false;
     hostJoinQueue.length = 0;
     renderRoomLockButton();
+    renderRoomAdminButtons();
     renderHostJoinRequestModal();
     appEl.classList.add('hidden');
     joinScreen.classList.remove('hidden');
@@ -1017,6 +1032,7 @@ function connectSocket(username) {
     roomLocked = false;
     hostJoinQueue.length = 0;
     renderRoomLockButton();
+    renderRoomAdminButtons();
     renderHostJoinRequestModal();
     appEl.classList.add('hidden');
     joinScreen.classList.remove('hidden');
@@ -1060,6 +1076,7 @@ function connectSocket(username) {
     roomLocked = !!roomLockedFromServer;
     updateWatermark(hostUsername || you.username);
     renderRoomLockButton();
+    renderRoomAdminButtons();
 
     // Update room badge
     if (room) {
@@ -1125,6 +1142,13 @@ function connectSocket(username) {
     if (user) toast(`${escHtml(user.username)} left`);
   });
   socket.on('user-list', (users) => updateUserList(users));
+
+  socket.on('room-host-changed', ({ hostUsername }) => {
+    if (hostUsername) {
+      toast(`👑 New host: ${escHtml(hostUsername)}`);
+      updateWatermark(hostUsername);
+    }
+  });
 
   socket.on('room-lock-state', ({ locked, by }) => {
     roomLocked = !!locked;
@@ -1399,6 +1423,7 @@ function updateUserList(users) {
     activeHostJoinRequest = null;
   }
   renderRoomLockButton();
+  renderRoomAdminButtons();
   renderHostAdminPanel();
   if (host) updateWatermark(host.username);
 
@@ -1751,6 +1776,22 @@ document.getElementById('clear-board-btn').addEventListener('click', () => {
     } else {
       socket?.emit('clear-board'); // server now clears tokens too and emits tokens-cleared
     }
+  });
+});
+
+leaveRoomBtn?.addEventListener('click', () => {
+  armConfirm('leave-room-btn', '🚪 Leave Room', 'Leave now?', () => {
+    socket?.emit('leave-room');
+  });
+});
+
+closeRoomBtn?.addEventListener('click', () => {
+  if (!myIsHost) {
+    toast('⚠️ Only host can close room');
+    return;
+  }
+  armConfirm('close-room-btn', '🛑 Close Room', 'Close for everyone?', () => {
+    socket?.emit('host-close-room');
   });
 });
 

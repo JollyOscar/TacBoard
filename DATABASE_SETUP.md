@@ -19,6 +19,45 @@ To enable persistent storage of board presets and recordings on Railway:
    - Check logs for: `[+] Database tables initialized`
    - Create a board preset - it should now survive redeployments!
 
+## Railway Workflow Helpers
+
+This repo includes helper commands so common Railway actions are one-liners.
+
+### npm scripts
+
+- `npm run railway:login`
+- `npm run railway:link`
+- `npm run railway:status`
+- `npm run railway:variables`
+- `npm run railway:deploy`
+- `npm run railway:health`
+
+For `railway:health`, set one of these environment variables:
+
+- `PUBLIC_BASE_URL` (recommended)
+- `APP_BASE_URL`
+- `RAILWAY_PUBLIC_DOMAIN`
+- `RAILWAY_STATIC_URL`
+
+Example:
+
+```powershell
+$env:PUBLIC_BASE_URL = "https://your-service.up.railway.app"
+npm run railway:health
+```
+
+### PowerShell helper
+
+Use `railway-next-steps.ps1` to run grouped workflows:
+
+```powershell
+.\railway-next-steps.ps1 -Action setup
+.\railway-next-steps.ps1 -Action status
+.\railway-next-steps.ps1 -Action vars
+.\railway-next-steps.ps1 -Action deploy
+.\railway-next-steps.ps1 -Action health -BaseUrl "https://your-service.up.railway.app"
+```
+
 ## Local Development:
 
 Without `DATABASE_URL`, the app falls back to JSON files for storage:
