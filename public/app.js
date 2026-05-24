@@ -2089,7 +2089,7 @@ function makePlaybookGhostCopy(tokenEl, tokenData) {
 }
 
 function renderPlaybookSpeedTether() {
-  if (!_isPlaybookDraftMode) return;
+  if (!_isPlaybookDraftMode || isPlaybookPlaying) return;
   if (_selectedDraftStepIndex < 0 || !_draftPlaybookSteps[_selectedDraftStepIndex]) return;
 
   const step = _draftPlaybookSteps[_selectedDraftStepIndex];
@@ -2379,11 +2379,8 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     ensureTokenLocal(t);
   });
 
-  // Keep only the active step's ghosts visible, and let them remain until
-  // the next step starts or the playbook ends.
   clearPlaybookGhosts();
 
-  const trailNodes = [];
   const rect = canvasStack.getBoundingClientRect();
   const scaleX = rect.width / PITCH_W;
   const scaleY = rect.height / PITCH_H;
@@ -2404,35 +2401,6 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     const { to, startX, startY, endX, endY, distance } = meta;
     const tokenEl = document.getElementById('token-' + to.id);
     if (!tokenEl) return;
-    const trail = document.createElement('div');
-    trail.className = 'playbook-move-trail';
-    trail.style.left = `${startX}px`;
-    trail.style.top = `${startY}px`;
-    trail.style.width = `${distance}px`;
-    trail.style.transform = `rotate(${Math.atan2(endY - startY, endX - startX)}rad)`;
-
-    const line = document.createElement('div');
-    line.className = 'playbook-move-trail-line';
-    trail.appendChild(line);
-
-    [0.2, 0.5, 0.8].forEach(fraction => {
-      const dot = document.createElement('span');
-      dot.className = 'playbook-move-trail-dot';
-      dot.style.left = `${distance * fraction}px`;
-      trail.appendChild(dot);
-    });
-
-    const ghost = tokenEl.cloneNode(true);
-    ghost.classList.add('playbook-move-ghost');
-    ghost.style.left = '0';
-    ghost.style.top = '0';
-    ghost.style.opacity = '0.16';
-    ghost.style.transform = 'translate(-50%, -50%)';
-    trail.appendChild(ghost);
-
-    cursorLayer.appendChild(trail);
-    trailNodes.push(trail);
-    _playbookGhostNodes.push(trail);
   });
 
   const removeIds = Object.keys(tokens).filter(id => !targetMap[id]);

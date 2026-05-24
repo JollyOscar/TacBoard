@@ -1004,7 +1004,404 @@
           }
         }
       ]
+    },
+    {
+      "id": 4,
+      "name": "Five Piece Progression",
+      "timestamp": 1779585809074,
+      "steps": [
+        {
+          "name": "Step 1",
+          "duration": 1200,
+          "tokens": {
+            "ball": {
+              "id": "ball",
+              "x": 130,
+              "y": 290,
+              "color": "#ffffff",
+              "label": "ball",
+              "shape": "ball",
+              "createdBy": "HostOwner"
+            },
+            "flag": {
+              "id": "flag",
+              "x": 150,
+              "y": 210,
+              "color": "#ffffff",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "cone": {
+              "id": "cone",
+              "x": 150,
+              "y": 370,
+              "color": "#ffffff",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "x": {
+              "id": "x",
+              "x": 200,
+              "y": 290,
+              "color": "#ffffff",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "star": {
+              "id": "star",
+              "x": 250,
+              "y": 180,
+              "color": "#ffffff",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "shield": {
+              "id": "shield",
+              "x": 250,
+              "y": 400,
+              "color": "#ffffff",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "target": {
+              "id": "target",
+              "x": 320,
+              "y": 260,
+              "color": "#ffffff",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "trophy": {
+              "id": "trophy",
+              "x": 360,
+              "y": 340,
+              "color": "#ffffff",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            }
+          }
+        },
+        {
+          "name": "Step 2",
+          "duration": 1200,
+          "tokens": {
+            "ball": {
+              "id": "ball",
+              "x": 200,
+              "y": 280,
+              "color": "#ffffff",
+              "label": "ball",
+              "shape": "ball",
+              "createdBy": "HostOwner"
+            },
+            "flag": {
+              "id": "flag",
+              "x": 220,
+              "y": 190,
+              "color": "#ffffff",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "cone": {
+              "id": "cone",
+              "x": 220,
+              "y": 350,
+              "color": "#ffffff",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "x": {
+              "id": "x",
+              "x": 270,
+              "y": 270,
+              "color": "#ffffff",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "star": {
+              "id": "star",
+              "x": 320,
+              "y": 160,
+              "color": "#ffffff",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "shield": {
+              "id": "shield",
+              "x": 320,
+              "y": 380,
+              "color": "#ffffff",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "target": {
+              "id": "target",
+              "x": 390,
+              "y": 240,
+              "color": "#ffffff",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "trophy": {
+              "id": "trophy",
+              "x": 430,
+              "y": 320,
+              "color": "#ffffff",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            }
+          }
+        },
+        {
+          "name": "Step 3",
+          "duration": 1200,
+          "tokens": {
+            "ball": {
+              "id": "ball",
+              "x": 300,
+              "y": 250,
+              "color": "#ffffff",
+              "label": "ball",
+              "shape": "ball",
+              "createdBy": "HostOwner"
+            },
+            "flag": {
+              "id": "flag",
+              "x": 270,
+              "y": 160,
+              "color": "#ffffff",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "cone": {
+              "id": "cone",
+              "x": 270,
+              "y": 330,
+              "color": "#ffffff",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "x": {
+              "id": "x",
+              "x": 350,
+              "y": 250,
+              "color": "#ffffff",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "star": {
+              "id": "star",
+              "x": 410,
+              "y": 130,
+              "color": "#ffffff",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "shield": {
+              "id": "shield",
+              "x": 410,
+              "y": 360,
+              "color": "#ffffff",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "target": {
+              "id": "target",
+              "x": 470,
+              "y": 220,
+              "color": "#ffffff",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "trophy": {
+              "id": "trophy",
+              "x": 520,
+              "y": 300,
+              "color": "#ffffff",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            }
+          }
+        },
+        {
+          "name": "Step 4",
+          "duration": 1200,
+          "tokens": {
+            "ball": {
+              "id": "ball",
+              "x": 400,
+              "y": 210,
+              "color": "#ffffff",
+              "label": "ball",
+              "shape": "ball",
+              "createdBy": "HostOwner"
+            },
+            "flag": {
+              "id": "flag",
+              "x": 340,
+              "y": 130,
+              "color": "#ffffff",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "cone": {
+              "id": "cone",
+              "x": 340,
+              "y": 300,
+              "color": "#ffffff",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "x": {
+              "id": "x",
+              "x": 430,
+              "y": 220,
+              "color": "#ffffff",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "star": {
+              "id": "star",
+              "x": 500,
+              "y": 110,
+              "color": "#ffffff",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "shield": {
+              "id": "shield",
+              "x": 500,
+              "y": 330,
+              "color": "#ffffff",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "target": {
+              "id": "target",
+              "x": 560,
+              "y": 190,
+              "color": "#ffffff",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "trophy": {
+              "id": "trophy",
+              "x": 610,
+              "y": 270,
+              "color": "#ffffff",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            }
+          }
+        },
+        {
+          "name": "Step 5",
+          "duration": 1200,
+          "tokens": {
+            "ball": {
+              "id": "ball",
+              "x": 500,
+              "y": 170,
+              "color": "#ffffff",
+              "label": "ball",
+              "shape": "ball",
+              "createdBy": "HostOwner"
+            },
+            "flag": {
+              "id": "flag",
+              "x": 410,
+              "y": 100,
+              "color": "#ffffff",
+              "label": "flag",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "cone": {
+              "id": "cone",
+              "x": 410,
+              "y": 270,
+              "color": "#ffffff",
+              "label": "cone",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "x": {
+              "id": "x",
+              "x": 510,
+              "y": 190,
+              "color": "#ffffff",
+              "label": "x",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "star": {
+              "id": "star",
+              "x": 590,
+              "y": 90,
+              "color": "#ffffff",
+              "label": "star",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "shield": {
+              "id": "shield",
+              "x": 590,
+              "y": 300,
+              "color": "#ffffff",
+              "label": "shield",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "target": {
+              "id": "target",
+              "x": 640,
+              "y": 160,
+              "color": "#ffffff",
+              "label": "target",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            },
+            "trophy": {
+              "id": "trophy",
+              "x": 700,
+              "y": 240,
+              "color": "#ffffff",
+              "label": "trophy",
+              "shape": "icon",
+              "createdBy": "HostOwner"
+            }
+          }
+        }
+      ]
     }
   ],
-  "nextId": 4
+  "nextId": 5
 }
