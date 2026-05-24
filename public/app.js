@@ -2118,7 +2118,14 @@ function renderPlaybookSpeedTether() {
     const endX = Number(current.x) * scaleX;
     const endY = Number(current.y) * scaleY;
     const distance = Math.hypot(endX - startX, endY - startY);
-    if (distance < 1) return;
+    if (distance < 8) {
+      const stale = _playbookSpeedTetherNodes.get(tokenId);
+      if (stale) {
+        stale.remove();
+        _playbookSpeedTetherNodes.delete(tokenId);
+      }
+      return;
+    }
 
     const angle = Math.atan2(endY - startY, endX - startX);
     const handleT = (tokenSpeedFactor - 0.25) / (4 - 0.25);
@@ -2127,6 +2134,7 @@ function renderPlaybookSpeedTether() {
     let line;
     let ghost;
     let handle;
+    let syncHandle = () => {};
 
     if (!tether) {
       tether = document.createElement('div');
@@ -2149,13 +2157,22 @@ function renderPlaybookSpeedTether() {
       handle.title = 'Drag to change token speed';
       tether.appendChild(handle);
 
+      syncHandle = () => {
+        if (!handle) return;
+        const factor = getPlaybookTokenSpeedFactor(step, tokenStep);
+        const t = Math.max(0, Math.min(1, (factor - 0.25) / (4 - 0.25)));
+        handle.style.left = `${(tether._distance || 0) * t}px`;
+      };
+
       const updateSpeedFromPointer = (clientX, clientY) => {
+        if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
         const rect2 = canvasStack.getBoundingClientRect();
         const localX = clientX - rect2.left;
         const localY = clientY - rect2.top;
         const dx = tether._endX - tether._startX;
         const dy = tether._endY - tether._startY;
-        const projected = ((localX - tether._startX) * dx + (localY - tether._startY) * dy) / (tether._distance ** 2);
+        const distanceSq = Math.max(1, (tether._distance || 0) ** 2);
+        const projected = ((localX - tether._startX) * dx + (localY - tether._startY) * dy) / distanceSq;
         const clamped = Math.max(0, Math.min(1, projected));
         const newFactor = 0.25 + (4 - 0.25) * clamped;
         tokenStep.speedFactor = clampPlaybookTokenSpeedFactor(newFactor, 1);
@@ -2179,7 +2196,9 @@ function renderPlaybookSpeedTether() {
       const endDrag = (e) => {
         if (!_playbookSpeedDrag || _playbookSpeedDrag.stepIndex !== _selectedDraftStepIndex) return;
         if (_playbookSpeedDrag.pointerId !== e.pointerId) return;
-        updateSpeedFromPointer(e.clientX, e.clientY);
+        if (Number.isFinite(e.clientX) && Number.isFinite(e.clientY)) {
+          updateSpeedFromPointer(e.clientX, e.clientY);
+        }
         _playbookSpeedDrag = null;
         renderPlaybookDraftList();
         renderPlaybookSpeedTether();
@@ -2194,6 +2213,7 @@ function renderPlaybookSpeedTether() {
       hitbox.addEventListener('pointermove', moveDrag);
       hitbox.addEventListener('pointerup', endDrag);
       hitbox.addEventListener('pointercancel', endDrag);
+      hitbox.addEventListener('lostpointercapture', endDrag);
 
       _playbookSpeedTetherNodes.set(tokenId, tether);
       cursorLayer.appendChild(tether);
@@ -2202,6 +2222,12 @@ function renderPlaybookSpeedTether() {
       line = tether.querySelector('.playbook-speed-tether-line');
       ghost = tether.querySelector('.playbook-speed-tether-ghost');
       handle = tether.querySelector('.playbook-speed-tether-handle');
+      syncHandle = () => {
+        if (!handle) return;
+        const factor = getPlaybookTokenSpeedFactor(step, tokenStep);
+        const t = Math.max(0, Math.min(1, (factor - 0.25) / (4 - 0.25)));
+        handle.style.left = `${(tether._distance || 0) * t}px`;
+      };
     }
 
     tether.style.left = `${startX}px`;
@@ -2222,7 +2248,7 @@ function renderPlaybookSpeedTether() {
       ghost.style.opacity = '0.16';
     }
     if (handle) {
-      handle.style.left = `${distance * Math.max(0, Math.min(1, handleT))}px`;
+      syncHandle();
     }
   });
 }
