@@ -381,6 +381,7 @@ function redrawStrokes() {
   strokesCtx.clearRect(0, 0, strokesCanvas.width, strokesCanvas.height);
   allStrokes.forEach(s => renderStroke(strokesCtx, s));
   allArrows.forEach(a  => renderArrow(strokesCtx, a));
+  (_playbookAnimatedArrows || []).forEach(a => renderArrow(strokesCtx, a));
   
   // Render fading laser strokes
   const now = Date.now();
@@ -1430,12 +1431,13 @@ function connectSocket(username) {
     toast(`▶ Playbook running: ${escHtml(name)}`);
   });
 
-  socket.on('playbook-step', ({ targets, duration, startAt, stepSpeed, instantStart }) => {
+  socket.on('playbook-step', ({ targets, arrows, duration, startAt, stepSpeed, instantStart }) => {
     isPlaybookPlaying = true;
     _isLocalDraftPlayback = false;
     liveCanvas.style.pointerEvents = 'none';
     schedulePlaybookAnimation(
       targets || [],
+      arrows || [],
       Number(duration) || 1200,
       Number(startAt) || Date.now(),
       stepSpeed,
@@ -1940,6 +1942,7 @@ let _selectedPlaybookId = null;
 let _draftPlaybookId = null;
 let _draftPlaybookSteps = [];
 let _playbookAnimRaf = null;
+let _playbookAnimatedArrows = [];
 let _playbookStepStartTimers = [];
 let _playbookAnimBusyUntil = 0;
 let _isPlaybookDraftMode = false;
@@ -2040,6 +2043,11 @@ function snapshotTokensForStep() {
     };
   });
   return out;
+}
+
+function snapshotArrowsForStep() {
+  const stepArrows = allArrows.filter(a => a.tool === 'arrow').map(a => ({ ...a }));
+  return stepArrows;
 }
 
 function updatePlaybookDraftStatus() {
@@ -2295,6 +2303,8 @@ function resetPlaybookAnimationSchedule() {
   _playbookAnimBusyUntil = 0;
   cancelAnimationFrame(_playbookAnimRaf);
   _playbookAnimRaf = null;
+  _playbookAnimatedArrows = [];
+  redrawStrokes();
 }
 
 function estimatePlaybookMotionDurationFromState(fromTokens, targets, duration, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, instantStart = false) {
@@ -2331,11 +2341,13 @@ function finishPlaybookPlayback(message = '⏹ Playbook playback ended') {
   if (!isReplaying) liveCanvas.style.pointerEvents = '';
   // Let the current animation frame gracefully finish on its own if running
   clearPlaybookGhosts();
+  _playbookAnimatedArrows = [];
+  redrawStrokes();
   renderPlaybookSpeedTether();
   if (message) toast(message);
 }
 
-function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
+function schedulePlaybookAnimation(targets, arrows, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
   const instantStart = !!options.instantStart;
   const minDuration = instantStart ? 40 : 250;
   const safeDuration = Math.max(minDuration, Math.min(10000, Number(duration) || 1200));
@@ -2347,7 +2359,7 @@ function schedulePlaybookAnimation(targets, duration, startAt, stepSpeed = DEFAU
 
   const timerId = setTimeout(() => {
     _playbookStepStartTimers = _playbookStepStartTimers.filter(id => id !== timerId);
-    animateTokensToTargets(targets || [], completionDuration, plannedStart, safeStepSpeed, { instantStart });
+    animateTokensToTargets(targets || [], arrows || [], completionDuration, plannedStart, safeStepSpeed, { instantStart });
   }, Math.max(0, plannedStart - Date.now()));
 
   _playbookStepStartTimers.push(timerId);
@@ -2387,7 +2399,7 @@ function playCurrentDraft() {
 
     const timerId = setTimeout(() => {
       if (!isPlaybookPlaying || !_isLocalDraftPlayback) return;
-      schedulePlaybookAnimation(stepTargets, duration, stepStartAt, stepSpeed, { instantStart: isFirstAlignment });
+      schedulePlaybookAnimation(stepTargets, step.arrows || [], duration, stepStartAt, stepSpeed, { instantStart: isFirstAlignment });
     }, Math.max(0, stepStartAt - Date.now() - DRAFT_STEP_LEAD_MS));
 
     _playbookStepStartTimers.push(timerId);
@@ -2408,12 +2420,21 @@ function captureDraftStep(stepName = null) {
   const n = _draftPlaybookSteps.length + 1;
   const defaultName = `Step ${n}`;
   const safeName = (stepName || defaultName).toString().trim().substring(0, 60) || defaultName;
+  const stepArrows = snapshotArrowsForStep();
+  
   _draftPlaybookSteps.push({
     name: safeName,
     duration: 1200,
     speed: DEFAULT_PLAYBOOK_STEP_SPEED,
-    tokens: snapshotTokensForStep()
+    tokens: snapshotTokensForStep(),
+    arrows: stepArrows
   });
+
+  const arrowIds = stepArrows.map(a => a.id);
+  if (arrowIds.length > 0) {
+    socket?.emit('arrow-remove', { ids: arrowIds });
+  }
+
   _selectedDraftStepIndex = _draftPlaybookSteps.length - 1;
   updatePlaybookDraftStatus();
   renderPlaybookDraftList();
@@ -2560,7 +2581,18 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
     const travelDuration = Math.max(250, Math.ceil((distance / speed) * 1000));
     return { to, from, startX, startY, endX, endY, distance, speed, travelDuration };
   });
+  });
   const completionDuration = Math.max(duration, ...targetMeta.map(meta => meta.travelDuration));
+
+  const targetArrowsMeta = (arrows || []).map(a => {
+    return {
+      arrow: a,
+      startX: a.x1,
+      startY: a.y1,
+      endX: a.x2,
+      endY: a.y2
+    };
+  });
 
   if (instantStart) {
     Object.values(targetMap).forEach(to => {
@@ -2597,6 +2629,19 @@ function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_
       const el = document.getElementById('token-' + to.id);
       if (el) positionToken(el, token.x, token.y);
     });
+
+    _playbookAnimatedArrows = [];
+    targetArrowsMeta.forEach(meta => {
+      const p = Math.max(0, Math.min(1, elapsed / completionDuration));
+      if (p > 0) {
+        _playbookAnimatedArrows.push({
+          ...meta.arrow,
+          x2: meta.startX + (meta.endX - meta.startX) * p,
+          y2: meta.startY + (meta.endY - meta.startY) * p
+        });
+      }
+    });
+    redrawStrokes();
 
     if (!allDone) {
       _playbookAnimRaf = requestAnimationFrame(run);

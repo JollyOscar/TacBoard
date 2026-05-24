@@ -796,7 +796,8 @@ function startPlaybook(roomId, playbook) {
         stepSpeed,
         instantStart,
         startAt: stepStartAt,
-        targets: Object.values(step.tokens || {})
+        targets: Object.values(step.tokens || {}),
+        arrows: step.arrows || []
       });
 
       if (idx === steps.length - 1) {
