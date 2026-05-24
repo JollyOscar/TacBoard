@@ -2538,7 +2538,7 @@ function ensureTokenLocal(tokenData) {
   positionToken(el, tokens[tokenData.id].x, tokens[tokenData.id].y);
 }
 
-function animateTokensToTargets(targets, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
+function animateTokensToTargets(targets, arrows, duration, startAt, stepSpeed = DEFAULT_PLAYBOOK_STEP_SPEED, options = {}) {
   const instantStart = !!options.instantStart;
   const targetMap = {};
   (targets || []).forEach(t => {
