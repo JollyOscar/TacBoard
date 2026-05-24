@@ -2164,7 +2164,7 @@ function renderPlaybookSpeedTether() {
     }
 
     const angle = Math.atan2(endY - startY, endX - startX);
-    const handleT = (tokenSpeedFactor - 0.25) / (4 - 0.25);
+    const handleT = (tokenSpeedFactor - 0.6) / (1.6 - 0.6);
     let tether = _playbookSpeedTetherNodes.get(tokenId);
     let hitbox;
     let line;
@@ -2196,7 +2196,7 @@ function renderPlaybookSpeedTether() {
       syncHandle = () => {
         if (!handle) return;
         const factor = getPlaybookTokenSpeedFactor(step, tokenStep);
-        const t = Math.max(0, Math.min(1, (factor - 0.25) / (4 - 0.25)));
+        const t = Math.max(0, Math.min(1, (factor - 0.6) / (1.6 - 0.6)));
         handle.style.left = `${(tether._distance || 0) * t}px`;
       };
 
@@ -2210,7 +2210,7 @@ function renderPlaybookSpeedTether() {
         const distanceSq = Math.max(1, (tether._distance || 0) ** 2);
         const projected = ((localX - tether._startX) * dx + (localY - tether._startY) * dy) / distanceSq;
         const clamped = Math.max(0, Math.min(1, projected));
-        const newFactor = 0.25 + (4 - 0.25) * clamped;
+        const newFactor = 0.6 + (1.6 - 0.6) * clamped;
         tokenStep.speedFactor = clampPlaybookTokenSpeedFactor(newFactor, 1);
         syncHandle();
       };
@@ -2261,7 +2261,7 @@ function renderPlaybookSpeedTether() {
       syncHandle = () => {
         if (!handle) return;
         const factor = getPlaybookTokenSpeedFactor(step, tokenStep);
-        const t = Math.max(0, Math.min(1, (factor - 0.25) / (4 - 0.25)));
+        const t = Math.max(0, Math.min(1, (factor - 0.6) / (1.6 - 0.6)));
         handle.style.left = `${(tether._distance || 0) * t}px`;
       };
     }
@@ -2649,7 +2649,7 @@ function renderPlaybookDraftList() {
       return `
         <div class="playbook-token-speed-row">
           <span class="playbook-token-speed-label">${escHtml((token.label || token.id || tokenId).toString())}</span>
-          <input class="playbook-token-speed-input" data-step-index="${idx}" data-token-id="${tokenId}" type="range" min="0.25" max="4" step="0.05" value="${factor}" />
+          <input class="playbook-token-speed-input" data-step-index="${idx}" data-token-id="${tokenId}" type="range" min="0.6" max="1.6" step="0.05" value="${factor}" />
           <span class="playbook-token-speed-value">${Math.round(tokenSpeed)} px/s</span>
         </div>
       `;
